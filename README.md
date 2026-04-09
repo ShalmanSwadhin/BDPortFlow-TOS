@@ -1,5 +1,5 @@
 
-  # BDPortFlow Terminal Operating System UI
+  # BDPortFlow Terminal Operating System
 
   This is a code bundle for BDPortFlow Terminal Operating System UI. The original project is available at https://www.figma.com/design/9FJOgEdRyu2UxITKAFRytg/BDPortFlow-Terminal-Operating-System-UI.
 
