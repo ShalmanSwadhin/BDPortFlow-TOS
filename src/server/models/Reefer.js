@@ -45,7 +45,7 @@ const reeferSchema = new mongoose.Schema({
   alerts: [{
     type: {
       type: String,
-      enum: ['Temperature', 'Power', 'Door', 'Humidity']
+      enum: ['Temperature', 'Power', 'Door', 'Humidity', 'Technician Request']
     },
     message: String,
     timestamp: {

@@ -1,63 +1,124 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import { reeferAPI, technicianAPI } from '../api/client';
 import { Snowflake, AlertTriangle, TrendingDown, Thermometer, Battery, Zap, Phone } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import TechnicianDispatchModal from './TechnicianDispatchModal';
 import { toast } from 'sonner@2.0.3';
 import ReeferHistoryModal from './ReeferHistoryModal';
+import ModuleInfoPanel, { MODULE_INFO } from './ModuleInfoPanel';
+
+const DISPLAY_LIMIT = 3;
 
 export default function ReeferMonitoring() {
-  const { containers, updateContainer, addNotification } = useApp();
+  const { reefers, refreshAllData } = useApp();
   const [selectedReefer, setSelectedReefer] = useState<any>(null);
   const [adjustTemp, setAdjustTemp] = useState(false);
   const [newTemp, setNewTemp] = useState('');
   const [showTechModal, setShowTechModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
 
-  const reefers = containers.filter(c => c.type === 'reefer' && c.temperature !== undefined);
+  const reeferList = useMemo(
+    () =>
+      reefers.map((r: any) => ({
+        id: r.containerId,
+        _id: r._id,
+        currentTemp: r.currentTemp,
+        temperature: r.currentTemp,
+        targetTemp: r.setPoint,
+        location: r.location,
+        cargo: r.cargo,
+        alarm: r.status === 'Critical' || r.status === 'Warning',
+        status: r.status,
+        humidity: r.humidity ?? 0,
+        power: r.powerStatus === 'Connected' ? Math.min(100, 82 + (r.humidity ?? 0) % 18) : 0,
+        history: r.history || [],
+        alerts: r.alerts || [],
+      })),
+    [reefers]
+  );
 
-  const handleAdjustTemp = () => {
+  const displayedReefers = useMemo(() => reeferList.slice(0, DISPLAY_LIMIT), [reeferList]);
+
+  const stats = useMemo(() => {
+    const criticalCount = reeferList.filter(r => r.status === 'Critical').length;
+    const warningCount = reeferList.filter(r => r.status === 'Warning').length;
+    const connected = reeferList.filter(r => r.power > 0);
+    const avgPower = connected.length
+      ? Math.round(connected.reduce((sum, r) => sum + r.power, 0) / connected.length)
+      : 0;
+
+    return {
+      total: reeferList.length,
+      criticalCount,
+      warningCount,
+      activeAlerts: criticalCount + warningCount,
+      avgPower,
+    };
+  }, [reeferList]);
+
+  const alertReefers = useMemo(
+    () => reeferList.filter(r => r.alarm),
+    [reeferList]
+  );
+
+  const handleAdjustTemp = async () => {
     if (!selectedReefer || !newTemp) return;
-    
+
     const temp = parseFloat(newTemp);
-    updateContainer(selectedReefer.id, { targetTemp: temp });
-    addNotification({
-      type: 'success',
-      message: `Target temperature updated for ${selectedReefer.id} to ${temp}°C`,
-    });
-    setAdjustTemp(false);
-    setNewTemp('');
+    try {
+      await reeferAPI.adjustTemperature(selectedReefer._id, { setPoint: temp, currentTemp: temp });
+      toast.success(`Temperature updated for ${selectedReefer.id}`);
+      setAdjustTemp(false);
+      setNewTemp('');
+      await refreshAllData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to update temperature');
+    }
   };
 
-  const handleDispatchTechnician = (techId: number) => {
+  const handleDispatchTechnician = async (technician: { id: number; name: string }) => {
     if (!selectedReefer) return;
-    
-    addNotification({
-      type: 'info',
-      message: `Technician dispatched for container ${selectedReefer.id}`,
-    });
+    try {
+      const response = await technicianAPI.create({
+        containerId: selectedReefer.id,
+        reeferId: selectedReefer._id,
+        issueType: 'Temperature',
+        priority: 'High',
+        notes: `Technician ${technician.name} dispatched`,
+        technicianName: technician.name,
+      });
+
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || 'Failed to dispatch technician');
+      }
+
+      toast.success(`Technician dispatched! ${technician.name} is on the way to ${selectedReefer.id}`);
+      setShowTechModal(false);
+      await refreshAllData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || err.message || 'Failed to dispatch technician');
+      throw err;
+    }
   };
 
-  const handleAcknowledgeAlert = (container: any) => {
-    updateContainer(container.id, { alarm: false });
-    addNotification({
-      type: 'success',
-      message: `Alert acknowledged for ${container.id}`,
-    });
+  const handleAcknowledgeAlert = async (reefer: any) => {
+    try {
+      await reeferAPI.update(reefer._id, { status: 'Normal' });
+      toast.success(`Alert acknowledged for ${reefer.id}`);
+      await refreshAllData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to acknowledge alert');
+    }
   };
 
-  const tempHistory = [
-    { time: '00:00', temp: -18.2 },
-    { time: '04:00', temp: -18.4 },
-    { time: '08:00', temp: -18.1 },
-    { time: '12:00', temp: -18.5 },
-    { time: '16:00', temp: -18.3 },
-    { time: '20:00', temp: -18.6 },
-    { time: '23:59', temp: -18.5 },
-  ];
+  const tempHistory = (selectedReefer?.history || []).slice(-7).map((h: any) => ({
+    time: new Date(h.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+    temp: h.temperature,
+  }));
 
   const getStatusColor = (status: string) => {
-    switch (status) {
+    switch (status?.toLowerCase()) {
       case 'normal': return { bg: '#00ff88', text: 'text-emerald-400', border: 'border-emerald-500' };
       case 'warning': return { bg: '#ffd700', text: 'text-yellow-400', border: 'border-yellow-500' };
       case 'critical': return { bg: '#ef4444', text: 'text-red-400', border: 'border-red-500' };
@@ -74,52 +135,50 @@ export default function ReeferMonitoring() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl sm:text-3xl mb-2">Reefer Container Monitoring</h2>
           <p className="text-slate-400">Real-time temperature and power management</p>
         </div>
-        <div className="flex items-center gap-3">
+        {stats.activeAlerts > 0 && (
           <div className="flex items-center gap-2 px-4 py-2 bg-red-500/20 border border-red-500/50 rounded-lg">
             <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-            <span className="text-red-400">2 Alerts Active</span>
+            <span className="text-red-400">
+              {stats.activeAlerts} Alert{stats.activeAlerts === 1 ? '' : 's'} Active
+            </span>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <Snowflake className="w-5 h-5 text-cyan-400 mb-2" />
-          <div className="text-2xl text-cyan-400 mb-1">54</div>
+          <div className="text-2xl text-cyan-400 mb-1">{stats.total}</div>
           <div className="text-slate-400 text-sm">Active Reefers</div>
         </div>
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <AlertTriangle className="w-5 h-5 text-red-400 mb-2" />
-          <div className="text-2xl text-red-400 mb-1">1</div>
+          <div className="text-2xl text-red-400 mb-1">{stats.criticalCount}</div>
           <div className="text-slate-400 text-sm">Critical Alerts</div>
         </div>
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <TrendingDown className="w-5 h-5 text-yellow-400 mb-2" />
-          <div className="text-2xl text-yellow-400 mb-1">1</div>
+          <div className="text-2xl text-yellow-400 mb-1">{stats.warningCount}</div>
           <div className="text-slate-400 text-sm">Warnings</div>
         </div>
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <Zap className="w-5 h-5 text-emerald-400 mb-2" />
-          <div className="text-2xl text-emerald-400 mb-1">91%</div>
+          <div className="text-2xl text-emerald-400 mb-1">{stats.avgPower}%</div>
           <div className="text-slate-400 text-sm">Avg Power Level</div>
         </div>
       </div>
 
-      {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Reefer Grid */}
         <div className="lg:col-span-2 bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-6">
           <h3 className="text-xl mb-4">Reefer Container Wall</h3>
-          
+
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {reefers.map((reefer) => {
+            {displayedReefers.map((reefer) => {
               const statusColors = getStatusColor(reefer.status);
               const tempStatus = getTempStatus(reefer.currentTemp, reefer.targetTemp);
               const tempColors = getStatusColor(tempStatus);
@@ -134,20 +193,15 @@ export default function ReeferMonitoring() {
                       : 'border-slate-700 bg-slate-800/50'
                   } ${reefer.alarm ? 'animate-pulse' : ''}`}
                 >
-                  {/* Alarm Indicator */}
                   {reefer.alarm && (
                     <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-ping"></div>
                   )}
 
-                  {/* Container ID */}
                   <div className="text-xs text-slate-400 mb-2">{reefer.id}</div>
 
-                  {/* Temperature Display */}
                   <div className="flex items-center justify-center mb-3">
                     <div className="relative">
-                      <div
-                        className={`text-3xl ${tempColors.text}`}
-                      >
+                      <div className={`text-3xl ${tempColors.text}`}>
                         {reefer.currentTemp}°
                       </div>
                       <Thermometer
@@ -157,12 +211,10 @@ export default function ReeferMonitoring() {
                     </div>
                   </div>
 
-                  {/* Target Temp */}
                   <div className="text-xs text-slate-500 text-center mb-2">
                     Target: {reefer.targetTemp}°C
                   </div>
 
-                  {/* Power Level */}
                   <div className="flex items-center gap-2 mb-2">
                     <Battery className="w-3 h-3 text-slate-500" />
                     <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
@@ -174,7 +226,6 @@ export default function ReeferMonitoring() {
                     <span className="text-xs text-slate-500">{reefer.power}%</span>
                   </div>
 
-                  {/* Location */}
                   <div className="text-xs text-slate-500">{reefer.location}</div>
                 </div>
               );
@@ -182,7 +233,6 @@ export default function ReeferMonitoring() {
           </div>
         </div>
 
-        {/* Selected Reefer Details */}
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-6">
           <h3 className="text-xl mb-4">
             {selectedReefer ? 'Container Details' : 'Select Container'}
@@ -190,23 +240,19 @@ export default function ReeferMonitoring() {
 
           {selectedReefer ? (
             <div className="space-y-4">
-              {/* Status Badge */}
               <div
                 className={`p-4 rounded-lg border-2 ${getStatusColor(selectedReefer.status).border}`}
                 style={{ backgroundColor: `${getStatusColor(selectedReefer.status).bg}20` }}
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-slate-300">Status</span>
-                  <span
-                    className={`uppercase text-sm ${getStatusColor(selectedReefer.status).text}`}
-                  >
+                  <span className={`uppercase text-sm ${getStatusColor(selectedReefer.status).text}`}>
                     {selectedReefer.status}
                   </span>
                 </div>
                 <div className="text-sm text-slate-400">{selectedReefer.id}</div>
               </div>
 
-              {/* Temperature Info */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
                   <span className="text-slate-400">Current Temp</span>
@@ -226,7 +272,6 @@ export default function ReeferMonitoring() {
                 </div>
               </div>
 
-              {/* Cargo Info */}
               <div className="p-4 bg-slate-800/50 rounded-lg">
                 <div className="text-slate-400 text-sm mb-1">Cargo Type</div>
                 <div className="text-slate-200">{selectedReefer.cargo}</div>
@@ -234,7 +279,6 @@ export default function ReeferMonitoring() {
                 <div className="text-slate-200">{selectedReefer.location}</div>
               </div>
 
-              {/* Temperature Chart */}
               <div className="p-4 bg-slate-800/50 rounded-lg">
                 <div className="text-slate-400 text-sm mb-3">Temperature (24h)</div>
                 <ResponsiveContainer width="100%" height={120}>
@@ -254,7 +298,6 @@ export default function ReeferMonitoring() {
                 </ResponsiveContainer>
               </div>
 
-              {/* Actions */}
               <div className="space-y-2">
                 {!adjustTemp ? (
                   <>
@@ -323,19 +366,17 @@ export default function ReeferMonitoring() {
         </div>
       </div>
 
-      {/* Active Alerts */}
       <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-6">
         <h3 className="text-xl mb-4">Active Alerts</h3>
-        {reefers.filter(r => r.alarm).length === 0 ? (
+        {alertReefers.length === 0 ? (
           <div className="text-center py-8 text-slate-500">
             <Snowflake className="w-12 h-12 mx-auto mb-3 opacity-20" />
             <p className="text-sm">No active alerts</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {reefers.filter(r => r.alarm).map((container) => {
-              const tempDiff = Math.abs((container.temperature || 0) - (container.targetTemp || 0));
-              const isCritical = tempDiff > 3;
+            {alertReefers.map((container) => {
+              const isCritical = container.status === 'Critical';
 
               return (
                 <div
@@ -359,13 +400,16 @@ export default function ReeferMonitoring() {
                           {isCritical ? 'CRITICAL' : 'WARNING'}: Temperature Out of Range
                         </div>
                         <div className="text-sm text-slate-300 mb-2">
-                          Container {container.id} at {container.temperature}°C (Target: {container.targetTemp}°C)
+                          Container {container.id} at {container.currentTemp}°C (Target: {container.targetTemp}°C)
                         </div>
                         <div className="text-xs text-slate-500">{container.location}</div>
                       </div>
                     </div>
                     <button
-                      onClick={() => handleAcknowledgeAlert(container)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAcknowledgeAlert(container);
+                      }}
                       className={`px-3 py-1 rounded text-sm transition-colors ${
                         isCritical
                           ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400'
@@ -382,7 +426,6 @@ export default function ReeferMonitoring() {
         )}
       </div>
 
-      {/* Modals */}
       {showTechModal && selectedReefer && (
         <TechnicianDispatchModal
           container={selectedReefer}
@@ -397,6 +440,8 @@ export default function ReeferMonitoring() {
           onClose={() => setShowHistoryModal(false)}
         />
       )}
+
+      <ModuleInfoPanel content={MODULE_INFO.reefer} />
     </div>
   );
 }

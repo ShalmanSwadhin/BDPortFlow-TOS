@@ -1,4 +1,6 @@
 const Reefer = require('../models/Reefer');
+const { createAuditLog } = require('../utils/auditLogger');
+const { sendNotification } = require('../utils/notificationService');
 
 exports.getReefers = async (req, res) => {
   try {
@@ -37,13 +39,46 @@ exports.createReefer = async (req, res) => {
 
 exports.updateReefer = async (req, res) => {
   try {
-    const reefer = await Reefer.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true
-    });
+    const reefer = await Reefer.findById(req.params.id);
     if (!reefer) {
       return res.status(404).json({ success: false, message: 'Reefer not found' });
     }
+
+    const previousValues = {
+      currentTemp: reefer.currentTemp,
+      setPoint: reefer.setPoint,
+      status: reefer.status
+    };
+
+    if (req.body.currentTemp !== undefined || req.body.setPoint !== undefined) {
+      reefer.history.push({
+        temperature: req.body.currentTemp ?? reefer.currentTemp,
+        timestamp: new Date()
+      });
+    }
+
+    Object.assign(reefer, req.body);
+    await reefer.save();
+
+    if (req.body.currentTemp !== undefined || req.body.setPoint !== undefined) {
+      await createAuditLog({
+        user: req.user,
+        moduleName: 'Reefer Operations',
+        actionType: 'update',
+        recordId: reefer._id,
+        previousValues,
+        updatedValues: { currentTemp: reefer.currentTemp, setPoint: reefer.setPoint }
+      });
+
+      await sendNotification({
+        module: 'Reefer Operations',
+        action: 'Temperature Adjustment',
+        message: `Temperature adjusted for reefer ${reefer.containerId}: ${reefer.currentTemp}°C (set: ${reefer.setPoint}°C)`,
+        recordId: reefer._id,
+        createdBy: req.user._id
+      });
+    }
+
     res.json({ success: true, message: 'Reefer updated successfully', data: reefer });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -72,6 +107,45 @@ exports.addAlert = async (req, res) => {
     reefer.alerts.push(req.body);
     await reefer.save();
     res.json({ success: true, message: 'Alert added successfully', data: reefer });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.adjustTemperature = async (req, res) => {
+  try {
+    const { setPoint, currentTemp } = req.body;
+    const reefer = await Reefer.findById(req.params.id);
+    if (!reefer) {
+      return res.status(404).json({ success: false, message: 'Reefer not found' });
+    }
+
+    const previousValues = { currentTemp: reefer.currentTemp, setPoint: reefer.setPoint };
+
+    if (setPoint !== undefined) reefer.setPoint = setPoint;
+    if (currentTemp !== undefined) reefer.currentTemp = currentTemp;
+
+    reefer.history.push({ temperature: reefer.currentTemp, timestamp: new Date() });
+    await reefer.save();
+
+    await createAuditLog({
+      user: req.user,
+      moduleName: 'Reefer Operations',
+      actionType: 'update',
+      recordId: reefer._id,
+      previousValues,
+      updatedValues: { currentTemp: reefer.currentTemp, setPoint: reefer.setPoint }
+    });
+
+    await sendNotification({
+      module: 'Reefer Operations',
+      action: 'Temperature Adjustment',
+      message: `Temperature adjusted for ${reefer.containerId}`,
+      recordId: reefer._id,
+      createdBy: req.user._id
+    });
+
+    res.json({ success: true, message: 'Temperature updated successfully', data: reefer });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

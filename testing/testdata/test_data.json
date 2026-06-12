@@ -1,0 +1,51 @@
+{
+  "base_url": "http://localhost:5173",
+  "api_url": "http://localhost:5000/api",
+  "credentials": {
+    "admin": {
+      "email": "admin@bdport.gov.bd",
+      "password": "admin123",
+      "role": "admin"
+    },
+    "operator": {
+      "email": "operator@bdport.gov.bd",
+      "password": "operator123",
+      "role": "operator"
+    },
+    "berth": {
+      "email": "berth@bdport.gov.bd",
+      "password": "berth123",
+      "role": "berth"
+    },
+    "customs": {
+      "email": "customs@bdport.gov.bd",
+      "password": "customs123",
+      "role": "customs"
+    },
+    "finance": {
+      "email": "finance@bdport.gov.bd",
+      "password": "finance123",
+      "role": "finance"
+    },
+    "driver": {
+      "email": "driver@bdport.gov.bd",
+      "password": "driver123",
+      "role": "truck"
+    }
+  },
+  "users": {
+    "new_user": {
+      "name": "Sadia Akter",
+      "email": "sadia@bdport.gov.bd",
+      "password": "Sadia1234",
+      "role": "operator"
+    }
+  },
+  "truck_booking": {
+    "truck": "DHK-TEST-001",
+    "container": "TCLU9999999",
+    "driver": "Test Driver",
+    "contact": "+8801712345678",
+    "operationType": "Container Pickup"
+  }
+}

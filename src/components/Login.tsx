@@ -30,9 +30,9 @@ export default function Login({ onLogin, onForgotPassword, onBackToPublic }: Log
     
     try {
       await login(email, password);
-      // Get user role from localStorage after successful login
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       onLogin(user.role);
+      setIsLoading(false);
     } catch (err: any) {
       setError(err.message || 'Login failed. Please check your credentials.');
       setIsLoading(false);
@@ -211,7 +211,7 @@ export default function Login({ onLogin, onForgotPassword, onBackToPublic }: Log
 
         {/* Demo Credentials */}
         <div className="mt-6 p-4 bg-slate-900/50 backdrop-blur border border-slate-800 rounded-lg">
-          <p className="text-slate-400 text-xs sm:text-sm text-center mb-2">Demo Credentials (any password works)</p>
+          <p className="text-slate-400 text-xs sm:text-sm text-center mb-2"></p>
           <div className="grid grid-cols-2 gap-1.5 sm:gap-2 text-xs">
             <div className="text-slate-500 truncate">
               <span style={{ color: '#ff6b35' }}>●</span> Admin

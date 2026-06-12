@@ -1,4 +1,6 @@
 const Vessel = require('../models/Vessel');
+const { createAuditLog } = require('../utils/auditLogger');
+const { sendNotification } = require('../utils/notificationService');
 
 // @desc    Get all vessels
 // @route   GET /api/vessels
@@ -63,6 +65,22 @@ exports.createVessel = async (req, res) => {
     
     const vessel = await Vessel.create(req.body);
 
+    await createAuditLog({
+      user: req.user,
+      moduleName: 'Berth Planning',
+      actionType: 'create',
+      recordId: vessel._id,
+      updatedValues: { vesselName: vessel.vesselName, berthNumber: vessel.berthNumber }
+    });
+
+    await sendNotification({
+      module: 'Berth Planning',
+      action: 'Schedule Vessel',
+      message: `Vessel ${vessel.vesselName} scheduled at ${vessel.berthNumber}`,
+      recordId: vessel._id,
+      createdBy: req.user._id
+    });
+
     res.status(201).json({
       success: true,
       message: 'Vessel created successfully',
@@ -91,10 +109,39 @@ exports.updateVessel = async (req, res) => {
       });
     }
 
+    const previousValues = vessel.toObject();
+
     vessel = await Vessel.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true
     });
+
+    await createAuditLog({
+      user: req.user,
+      moduleName: 'Berth Planning',
+      actionType: 'update',
+      recordId: vessel._id,
+      previousValues,
+      updatedValues: vessel.toObject()
+    });
+
+    if (req.body.status === 'delayed' || req.body.status === 'Delayed') {
+      await sendNotification({
+        module: 'Berth Planning',
+        action: 'Vessel Delayed',
+        message: `Vessel ${vessel.vesselName} reported delayed`,
+        recordId: vessel._id,
+        createdBy: req.user._id
+      });
+    } else {
+      await sendNotification({
+        module: 'Berth Planning',
+        action: 'Update Schedule',
+        message: `Vessel schedule updated: ${vessel.vesselName}`,
+        recordId: vessel._id,
+        createdBy: req.user._id
+      });
+    }
 
     res.json({
       success: true,
@@ -124,7 +171,25 @@ exports.deleteVessel = async (req, res) => {
       });
     }
 
+    const previousValues = vessel.toObject();
     await vessel.deleteOne();
+
+    await createAuditLog({
+      user: req.user,
+      moduleName: 'Berth Planning',
+      actionType: 'delete',
+      recordId: req.params.id,
+      previousValues,
+      description: `Vessel schedule deleted: ${previousValues.vesselName}`
+    });
+
+    await sendNotification({
+      module: 'Berth Planning',
+      action: 'Delete Schedule',
+      message: `Vessel schedule deleted: ${previousValues.vesselName}`,
+      recordId: req.params.id,
+      createdBy: req.user._id
+    });
 
     res.json({
       success: true,

@@ -9,8 +9,18 @@ dotenv.config();
 const app = express();
 
 // Middleware
+const DEV_CLIENT_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:5173',
+];
+
+const configuredOrigins = process.env.CLIENT_URL
+  ? process.env.CLIENT_URL.split(',').map((origin) => origin.trim()).filter(Boolean)
+  : DEV_CLIENT_ORIGINS;
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: configuredOrigins,
   credentials: true
 }));
 app.use(express.json());
@@ -24,7 +34,11 @@ app.use((req, res, next) => {
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/bdportflow')
-  .then(() => console.log('✅ MongoDB Connected Successfully'))
+  .then(async () => {
+    console.log('✅ MongoDB Connected Successfully');
+    await ensureDefaultPermissions();
+    console.log('✅ Default permissions initialized');
+  })
   .catch(err => {
     console.error('❌ MongoDB Connection Error:', err);
     process.exit(1);
@@ -43,6 +57,13 @@ const railRoutes = require('./routes/rails');
 const customsRoutes = require('./routes/customs');
 const billingRoutes = require('./routes/billing');
 const dashboardRoutes = require('./routes/dashboard');
+const auditRoutes = require('./routes/audit');
+const notificationRoutes = require('./routes/notifications');
+const permissionRoutes = require('./routes/permissions');
+const stowageRoutes = require('./routes/stowage');
+const yardRoutes = require('./routes/yard');
+const technicianRoutes = require('./routes/technicians');
+const { ensureDefaultPermissions } = require('./utils/defaultPermissions');
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -53,10 +74,17 @@ app.use('/api/gates', gateRoutes);
 app.use('/api/berths', berthRoutes);
 app.use('/api/reefers', reeferRoutes);
 app.use('/api/trucks', truckRoutes);
+app.use('/api/bookings', truckRoutes);
 app.use('/api/rails', railRoutes);
 app.use('/api/customs', customsRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/audit', auditRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/permissions', permissionRoutes);
+app.use('/api/stowage', stowageRoutes);
+app.use('/api/yard', yardRoutes);
+app.use('/api/technicians', technicianRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {

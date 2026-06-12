@@ -1,8 +1,27 @@
-import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { authAPI, truckAPI, containerAPI, vesselAPI } from '../api/client';
+import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
+import {
+  authAPI,
+  truckAPI,
+  containerAPI,
+  vesselAPI,
+  notificationAPI,
+  reeferAPI,
+  gateAPI,
+  railAPI,
+  billingAPI,
+  permissionAPI,
+} from '../api/client';
+import {
+  mapContainerFromApi,
+  mapVesselFromApi,
+  mapBookingFromApi,
+  mapNotificationFromApi,
+  formatDateKey,
+} from '../utils/dataMappers';
 
 interface User {
   id: string;
+  _id?: string;
   name: string;
   email: string;
   role: string;
@@ -11,6 +30,7 @@ interface User {
 
 interface Container {
   id: string;
+  _id?: string;
   status: string;
   location: string;
   type: string;
@@ -22,21 +42,25 @@ interface Container {
   humidity?: number;
   cargo?: string;
   alarm?: boolean;
+  raw?: any;
 }
 
 interface Vessel {
-  id: number;
+  id: string | number;
+  _id?: string;
   name: string;
   length: number;
   draft: number;
   eta: string;
   etd: string;
   berth: number | null;
+  berthNumber?: string;
   status: string;
   cargo: string;
   containers: number;
   progress: number;
   color: string;
+  raw?: any;
 }
 
 interface TruckBooking {
@@ -49,33 +73,49 @@ interface TruckBooking {
   driver?: string;
   contact?: string;
   operationType?: string;
+  createdAt?: string;
+  raw?: any;
 }
 
 interface Notification {
-  id: number;
+  id: string | number;
   type: 'success' | 'warning' | 'error' | 'info';
   message: string;
   time: string;
   read: boolean;
+  module?: string;
+  raw?: any;
 }
 
 interface AppContextType {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  isLoading: boolean;
+  permissions: Record<string, any> | null;
+  login: (email: string, password: string) => Promise<string>;
   logout: () => void;
+  refreshAllData: () => Promise<void>;
+  refreshBookings: (date?: string) => Promise<void>;
+  refreshNotifications: () => Promise<void>;
   containers: Container[];
   vessels: Vessel[];
   bookings: TruckBooking[];
   notifications: Notification[];
-  addNotification: (notification: Omit<Notification, 'id' | 'time' | 'read'>) => void;
-  markNotificationRead: (id: number) => void;
-  updateContainer: (id: string, updates: Partial<Container>) => void;
-  updateVessel: (id: number, updates: Partial<Vessel>) => void;
-  addBooking: (booking: Omit<TruckBooking, 'id'>) => void;
-  updateBooking: (id: string, updates: Partial<TruckBooking>) => void;
-  deleteBooking: (id: string) => void;
+  reefers: any[];
+  gates: any[];
+  rails: any[];
+  invoices: any[];
+  markNotificationRead: (id: string | number) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
+  deleteNotification: (id: string) => Promise<void>;
+  updateContainer: (id: string, updates: Partial<Container>) => Promise<void>;
+  patchContainersFromStackMove: (updates: Array<{ containerId: string; location: Record<string, string> }>) => void;
+  updateVessel: (id: string, updates: Partial<Vessel>) => Promise<void>;
+  addBooking: (booking: Omit<TruckBooking, 'id'>) => Promise<void>;
+  updateBooking: (id: string, updates: Partial<TruckBooking>, refreshDate?: string) => Promise<void>;
+  deleteBooking: (id: string, refreshDate?: string) => Promise<void>;
+  hasPermission: (module: string, action?: 'view' | 'edit' | 'delete' | 'create') => boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -85,182 +125,277 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const savedUser = localStorage.getItem('user');
     return savedUser ? JSON.parse(savedUser) : null;
   });
-  
-  const [token, setToken] = useState<string | null>(() => {
-    return localStorage.getItem('token');
-  });
 
-  const [containers, setContainers] = useState<Container[]>([
-    { id: 'TCLU3456789', status: 'ready', location: 'Block A-12', type: 'standard', weight: 22.5, destination: 'Singapore' },
-    { id: 'YMMU8901234', status: 'customs', location: 'Block C-15', type: 'reefer', weight: 24.8, destination: 'Dubai', temperature: -22.8, targetTemp: -20, power: 100, humidity: 45, cargo: 'Pharmaceuticals', alarm: true },
-    { id: 'MAEU5678901', status: 'ready', location: 'Block A-08', type: 'standard', weight: 20.2, destination: 'Shanghai' },
-    { id: 'CSQU2345678', status: 'processing', location: 'Block D-20', type: 'standard', weight: 23.1, destination: 'Singapore' },
-    { id: 'HLBU7890123', status: 'ready', location: 'Block B-05', type: 'hazmat', weight: 25.3, destination: 'Dubai' },
-    { id: 'TCKU4567890', status: 'ready', location: 'Block C-18', type: 'reefer', weight: 21.7, destination: 'Shanghai', temperature: -19.9, targetTemp: -20, power: 94, humidity: 60, cargo: 'Frozen Fish', alarm: false },
-  ]);
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
+  const [isLoading, setIsLoading] = useState(false);
+  const [permissions, setPermissions] = useState<Record<string, any> | null>(null);
+  const [containers, setContainers] = useState<Container[]>([]);
+  const [vessels, setVessels] = useState<Vessel[]>([]);
+  const [bookings, setBookings] = useState<TruckBooking[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [reefers, setReefers] = useState<any[]>([]);
+  const [gates, setGates] = useState<any[]>([]);
+  const [rails, setRails] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
 
-  const [vessels, setVessels] = useState<Vessel[]>([
-    { id: 1, name: 'MV HARMONY', length: 280, draft: 12.5, eta: '14:30', etd: '18:00', berth: 1, status: 'loading', cargo: 'Container', containers: 245, progress: 65, color: '#00ff88' },
-    { id: 2, name: 'MSC AURORA', length: 350, draft: 14.2, eta: '16:00', etd: '22:00', berth: 2, status: 'unloading', cargo: 'Container', containers: 412, progress: 45, color: '#00d4ff' },
-    { id: 3, name: 'MAERSK LIBERTY', length: 320, draft: 13.8, eta: '09:00', etd: '15:00', berth: 3, status: 'loading', cargo: 'Container', containers: 328, progress: 85, color: '#ffd700' },
-    { id: 4, name: 'EVERGREEN PRIDE', length: 290, draft: 13.0, eta: 'Tomorrow 08:00', etd: 'Tomorrow 16:00', berth: null, status: 'incoming', cargo: 'Container', containers: 298, progress: 0, color: '#ff6b35' },
-  ]);
+  const loadPermissions = useCallback(async () => {
+    try {
+      const res = await permissionAPI.getMy();
+      if (res.data.success) {
+        setPermissions(res.data.data.modules);
+      }
+    } catch {
+      setPermissions(null);
+    }
+  }, []);
 
-  const [bookings, setBookings] = useState<TruckBooking[]>([
-    { id: '1', truck: 'DHK-GA-1234', container: 'TCLU3456789', slot: '14:30', date: '2024-11-28', status: 'confirmed', driver: 'Ahmed Khan', contact: '+880 1234-567890' },
-    { id: '2', truck: 'CHT-BA-5678', container: 'YMMU8901234', slot: '15:00', date: '2024-11-28', status: 'confirmed', driver: 'Fatima Rahman', contact: '+880 1234-567891' },
-    { id: '3', truck: 'DHK-KA-9012', container: 'MAEU5678901', slot: '15:30', date: '2024-11-28', status: 'pending', driver: 'Karim Hassan', contact: '+880 1234-567892' },
-    { id: '4', truck: 'CHT-TA-3456', container: 'CSQU2345678', slot: '16:00', date: '2024-11-28', status: 'confirmed', driver: 'Nazia Ahmed', contact: '+880 1234-567893' },
-  ]);
+  const refreshNotifications = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await notificationAPI.getAll();
+      if (res.data.success) {
+        setNotifications(res.data.data.map(mapNotificationFromApi));
+      }
+    } catch (error) {
+      console.error('Failed to load notifications:', error);
+    }
+  }, [token]);
 
-  const [notifications, setNotifications] = useState<Notification[]>([
-    { id: 1, type: 'error', message: 'Reefer YMMU8901234 temperature critical: -22.8°C', time: '2 min ago', read: false },
-    { id: 2, type: 'warning', message: 'Gate 3 weight mismatch detected', time: '5 min ago', read: false },
-    { id: 3, type: 'info', message: 'Berth 2 vessel MV HARMONY arrived', time: '15 min ago', read: false },
-    { id: 4, type: 'warning', message: 'Yard Block C approaching 95% capacity', time: '22 min ago', read: false },
-    { id: 5, type: 'error', message: 'Crane 4 maintenance alert', time: '1 hour ago', read: false },
-    { id: 6, type: 'success', message: 'Container TCLU3456789 ready for pickup', time: '1 hour ago', read: true },
-    { id: 7, type: 'success', message: 'Invoice INV-2024-001247 payment received', time: '2 hours ago', read: true },
-  ]);
+  const refreshBookings = useCallback(async (date?: string) => {
+    if (!token) return;
+    try {
+      const dateKey = date || formatDateKey(new Date());
+      const res = await truckAPI.getByDate(dateKey);
+      if (res.data.success) {
+        setBookings(res.data.data.map(mapBookingFromApi));
+      }
+    } catch (error) {
+      console.error('Failed to load bookings:', error);
+      setBookings([]);
+    }
+  }, [token]);
 
-  const addNotification = (notification: Omit<Notification, 'id' | 'time' | 'read'>) => {
-    const newNotification: Notification = {
-      ...notification,
-      id: Date.now(),
-      time: 'Just now',
-      read: false,
+  const refreshAllData = useCallback(async () => {
+    if (!token) return;
+    setIsLoading(true);
+    try {
+      const [containersRes, vesselsRes, notificationsRes, reefersRes, gatesRes, railsRes, billingRes] =
+        await Promise.allSettled([
+          containerAPI.getAll(),
+          vesselAPI.getAll(),
+          notificationAPI.getAll(),
+          reeferAPI.getAll(),
+          gateAPI.getAll(),
+          railAPI.getAll(),
+          billingAPI.getAll(),
+        ]);
+
+      if (containersRes.status === 'fulfilled' && containersRes.value.data.success) {
+        setContainers(containersRes.value.data.data.map(mapContainerFromApi));
+      }
+      if (vesselsRes.status === 'fulfilled' && vesselsRes.value.data.success) {
+        setVessels(vesselsRes.value.data.data.map((v: any, i: number) => mapVesselFromApi(v, i)));
+      }
+      if (notificationsRes.status === 'fulfilled' && notificationsRes.value.data.success) {
+        setNotifications(notificationsRes.value.data.data.map(mapNotificationFromApi));
+      }
+      if (reefersRes.status === 'fulfilled' && reefersRes.value.data.success) {
+        setReefers(reefersRes.value.data.data);
+      }
+      if (gatesRes.status === 'fulfilled' && gatesRes.value.data.success) {
+        setGates(gatesRes.value.data.data);
+      }
+      if (railsRes.status === 'fulfilled' && railsRes.value.data.success) {
+        setRails(railsRes.value.data.data);
+      }
+      if (billingRes.status === 'fulfilled' && billingRes.value.data.success) {
+        setInvoices(billingRes.value.data.data);
+      }
+
+      await loadPermissions();
+    } catch (error) {
+      console.error('Failed to refresh data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token, loadPermissions]);
+
+  useEffect(() => {
+    if (!token) {
+      setBookings([]);
+      return;
+    }
+    refreshBookings(formatDateKey(new Date()));
+  }, [token, refreshBookings]);
+
+  useEffect(() => {
+    if (!token) return;
+    const interval = setInterval(() => {
+      refreshAllData();
+    }, 30000);
+    const onFocus = () => refreshAllData();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
     };
-    setNotifications(prev => [newNotification, ...prev]);
+  }, [token, refreshAllData]);
+
+  useEffect(() => {
+    if (token) {
+      refreshAllData();
+    } else {
+      setContainers([]);
+      setVessels([]);
+      setBookings([]);
+      setNotifications([]);
+      setReefers([]);
+      setGates([]);
+      setRails([]);
+      setInvoices([]);
+      setPermissions(null);
+    }
+  }, [token, refreshAllData]);
+
+  const hasPermission = useCallback((module: string, action: 'view' | 'edit' | 'delete' | 'create' = 'view') => {
+    if (user?.role === 'admin') return true;
+    if (!permissions) return false;
+    return permissions[module]?.[action] === true;
+  }, [user, permissions]);
+
+  const markNotificationRead = async (id: string | number) => {
+    try {
+      await notificationAPI.markAsRead(String(id));
+      setNotifications(prev =>
+        prev.map(n => (n.id === id ? { ...n, read: true } : n))
+      );
+    } catch (error) {
+      console.error('Failed to mark notification read:', error);
+    }
   };
 
-  const markNotificationRead = (id: number) => {
-    setNotifications(prev =>
-      prev.map(notif => (notif.id === id ? { ...notif, read: true } : notif))
-    );
+  const markAllNotificationsRead = async () => {
+    try {
+      await notificationAPI.markAllAsRead();
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } catch (error) {
+      console.error('Failed to mark all read:', error);
+    }
   };
 
-  const updateContainer = (id: string, updates: Partial<Container>) => {
-    setContainers(prev =>
-      prev.map(container => (container.id === id ? { ...container, ...updates } : container))
-    );
+  const deleteNotification = async (id: string) => {
+    try {
+      await notificationAPI.delete(id);
+      setNotifications(prev => prev.filter(n => String(n.id) !== id));
+    } catch (error) {
+      console.error('Failed to delete notification:', error);
+    }
   };
 
-  const updateVessel = (id: number, updates: Partial<Vessel>) => {
-    setVessels(prev =>
-      prev.map(vessel => (vessel.id === id ? { ...vessel, ...updates } : vessel))
-    );
+  const updateContainer = async (id: string, updates: Partial<Container>) => {
+    try {
+      const container = containers.find(c => c.id === id);
+      const apiId = container?._id || id;
+      const response = await containerAPI.update(apiId, updates);
+      if (response.data.success) {
+        setContainers(prev =>
+          prev.map(c => (c.id === id ? { ...c, ...mapContainerFromApi(response.data.data) } : c))
+        );
+      }
+    } catch (error) {
+      console.error('Failed to update container:', error);
+      throw error;
+    }
+  };
+
+  const patchContainersFromStackMove = useCallback(
+    (updates: Array<{ containerId: string; location: Record<string, string> }>) => {
+      if (!updates?.length) return;
+      const byId = new Map(
+        updates.map(u => [String(u.containerId).toUpperCase(), u.location])
+      );
+      setContainers(prev =>
+        prev.map(c => {
+          const location = byId.get(String(c.id).toUpperCase());
+          if (!location) return c;
+          return mapContainerFromApi({ ...c.raw, location });
+        })
+      );
+    },
+    []
+  );
+
+  const updateVessel = async (id: string | number, updates: Partial<Vessel>) => {
+    try {
+      const response = await vesselAPI.update(String(id), updates);
+      if (response.data.success) {
+        setVessels(prev =>
+          prev.map((v, i) => (v.id === id ? mapVesselFromApi(response.data.data, i) : v))
+        );
+      }
+    } catch (error) {
+      console.error('Failed to update vessel:', error);
+      throw error;
+    }
   };
 
   const addBooking = async (booking: Omit<TruckBooking, 'id'>) => {
-    try {
-      const response = await truckAPI.create({
-        truckNumber: booking.truck,
-        driverName: booking.driver || 'Unknown Driver',
-        driverContact: booking.contact || '',
-        containerId: booking.container,
-        appointmentDate: booking.date,
-        appointmentTime: booking.slot,
-        purpose: booking.operationType === 'Container Pickup' ? 'Pickup' : 
-                booking.operationType === 'Container Delivery' ? 'Delivery' : 
-                booking.operationType === 'Empty Return' ? 'Empty Return' : 'Delivery',
-        status: booking.status || 'Scheduled',
-      });
+    const response = await truckAPI.create({
+      truckNumber: booking.truck,
+      driverName: booking.driver || 'Unknown Driver',
+      driverContact: booking.contact || '',
+      containerId: booking.container,
+      appointmentDate: booking.date,
+      appointmentTime: booking.slot,
+      purpose: booking.operationType === 'Container Pickup' ? 'Pickup'
+        : booking.operationType === 'Container Delivery' ? 'Delivery'
+        : booking.operationType === 'Empty Return' ? 'Empty Return' : 'Delivery',
+      status: booking.status || 'Scheduled',
+    });
 
-      if (response.data.success) {
-        const apiBooking = response.data.data;
-        const newBooking: TruckBooking = {
-          id: apiBooking._id.toString(),
-          truck: apiBooking.truckNumber,
-          container: apiBooking.containerId,
-          slot: apiBooking.appointmentTime,
-          date: new Date(apiBooking.appointmentDate).toISOString().split('T')[0],
-          status: apiBooking.status,
-          driver: apiBooking.driverName,
-          contact: apiBooking.driverContact,
-        };
-        setBookings(prev => [...prev, newBooking]);
-        addNotification({
-          type: 'success',
-          message: `Booking confirmed for ${booking.container} at ${booking.slot}`,
-        });
-      }
-    } catch (error: any) {
-      console.error('Error adding booking:', error);
-      addNotification({
-        type: 'error',
-        message: error.response?.data?.message || 'Failed to create booking',
-      });
+    if (response.data.success) {
+      await refreshBookings(booking.date);
+      await refreshNotifications();
+    } else {
+      throw new Error(response.data.message);
     }
   };
 
-  const updateBooking = async (id: string, updates: Partial<TruckBooking>) => {
-    try {
-      const response = await truckAPI.update(id.toString(), {
-        status: updates.status,
-        appointmentTime: updates.slot,
-        appointmentDate: updates.date,
-      });
+  const updateBooking = async (id: string, updates: Partial<TruckBooking>, refreshDate?: string) => {
+    const response = await truckAPI.update(id, {
+      status: updates.status,
+      appointmentTime: updates.slot,
+      appointmentDate: updates.date,
+    });
 
-      if (response.data.success) {
-        setBookings(prev =>
-          prev.map(booking => (booking.id === id ? { ...booking, ...updates } : booking))
-        );
-        addNotification({
-          type: 'success',
-          message: 'Booking updated successfully',
-        });
-      }
-    } catch (error: any) {
-      console.error('Error updating booking:', error);
-      addNotification({
-        type: 'error',
-        message: error.response?.data?.message || 'Failed to update booking',
-      });
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Failed to update booking');
+    }
+
+    await refreshBookings(refreshDate || updates.date || formatDateKey(new Date()));
+    await refreshNotifications();
+  };
+
+  const deleteBooking = async (id: string, refreshDate?: string) => {
+    const response = await truckAPI.delete(id);
+    if (response.data.success) {
+      await refreshBookings(refreshDate || formatDateKey(new Date()));
+      await refreshNotifications();
+    } else {
+      throw new Error(response.data.message || 'Failed to cancel booking');
     }
   };
 
-  const deleteBooking = async (id: string) => {
-    try {
-      const response = await truckAPI.delete(id.toString());
+  const login = async (email: string, password: string): Promise<string> => {
+    const response = await authAPI.login({ email, password });
+    const { user: userData, token: authToken } = response.data.data;
 
-      if (response.data.success) {
-        setBookings(prev => prev.filter(booking => booking.id !== id));
-        addNotification({
-          type: 'info',
-          message: 'Booking cancelled successfully',
-        });
-      }
-    } catch (error: any) {
-      console.error('Error deleting booking:', error);
-      addNotification({
-        type: 'error',
-        message: error.response?.data?.message || 'Failed to delete booking',
-      });
-    }
-  };
+    setUser(userData);
+    setToken(authToken);
+    localStorage.setItem('user', JSON.stringify(userData));
+    localStorage.setItem('token', authToken);
 
-  const login = async (email: string, password: string) => {
-    try {
-      const response = await authAPI.login({ email, password });
-      const { user: userData, token: authToken } = response.data.data;
-      
-      setUser(userData);
-      setToken(authToken);
-      localStorage.setItem('user', JSON.stringify(userData));
-      localStorage.setItem('token', authToken);
-      
-      addNotification({
-        type: 'success',
-        message: `Welcome back, ${userData.name}!`,
-      });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.message || 'Login failed';
-      addNotification({
-        type: 'error',
-        message: errorMessage,
-      });
-      throw new Error(errorMessage);
-    }
+    return userData.role;
   };
 
   const logout = () => {
@@ -268,10 +403,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setToken(null);
     localStorage.removeItem('user');
     localStorage.removeItem('token');
-    addNotification({
-      type: 'info',
-      message: 'Logged out successfully',
-    });
   };
 
   return (
@@ -280,19 +411,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
         user,
         token,
         isAuthenticated: !!token,
+        isLoading,
+        permissions,
         login,
         logout,
+        refreshAllData,
+        refreshBookings,
+        refreshNotifications,
         containers,
         vessels,
         bookings,
         notifications,
-        addNotification,
+        reefers,
+        gates,
+        rails,
+        invoices,
         markNotificationRead,
+        markAllNotificationsRead,
+        deleteNotification,
         updateContainer,
+        patchContainersFromStackMove,
         updateVessel,
         addBooking,
         updateBooking,
         deleteBooking,
+        hasPermission,
       }}
     >
       {children}

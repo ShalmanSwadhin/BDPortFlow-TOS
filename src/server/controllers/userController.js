@@ -1,4 +1,6 @@
 const User = require('../models/User');
+const { createAuditLog } = require('../utils/auditLogger');
+const { sendNotification } = require('../utils/notificationService');
 
 // @desc    Get all users
 // @route   GET /api/users
@@ -55,8 +57,17 @@ exports.createUser = async (req, res) => {
   try {
     const { name, email, password, role, status } = req.body;
 
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name, email, and password are required',
+      });
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+
     // Check if user exists
-    const userExists = await User.findOne({ email });
+    const userExists = await User.findOne({ email: normalizedEmail });
     if (userExists) {
       return res.status(400).json({
         success: false,
@@ -65,11 +76,27 @@ exports.createUser = async (req, res) => {
     }
 
     const user = await User.create({
-      name,
-      email,
+      name: String(name).trim(),
+      email: normalizedEmail,
       password,
       role: role || 'operator',
       status: status || 'active'
+    });
+
+    await createAuditLog({
+      user: req.user,
+      moduleName: 'User Management',
+      actionType: 'create',
+      recordId: user._id,
+      updatedValues: { name: user.name, email: user.email, role: user.role, status: user.status }
+    });
+
+    await sendNotification({
+      module: 'User Management',
+      action: 'Create User',
+      message: `New user created: ${user.name} (${user.role})`,
+      recordId: user._id,
+      createdBy: req.user._id
     });
 
     res.status(201).json({
@@ -102,6 +129,8 @@ exports.updateUser = async (req, res) => {
       });
     }
 
+    const previousValues = { name: user.name, email: user.email, role: user.role, status: user.status };
+
     // Update fields
     if (name) user.name = name;
     if (email) user.email = email;
@@ -109,6 +138,23 @@ exports.updateUser = async (req, res) => {
     if (status) user.status = status;
 
     await user.save();
+
+    await createAuditLog({
+      user: req.user,
+      moduleName: 'User Management',
+      actionType: 'update',
+      recordId: user._id,
+      previousValues,
+      updatedValues: { name: user.name, email: user.email, role: user.role, status: user.status }
+    });
+
+    await sendNotification({
+      module: 'User Management',
+      action: 'Update User',
+      message: `User updated: ${user.name}`,
+      recordId: user._id,
+      createdBy: req.user._id
+    });
 
     res.json({
       success: true,
@@ -138,7 +184,26 @@ exports.deleteUser = async (req, res) => {
       });
     }
 
+    const previousValues = { name: user.name, email: user.email, role: user.role, status: user.status };
+
     await user.deleteOne();
+
+    await createAuditLog({
+      user: req.user,
+      moduleName: 'User Management',
+      actionType: 'delete',
+      recordId: req.params.id,
+      previousValues,
+      description: `User deleted: ${previousValues.name}`
+    });
+
+    await sendNotification({
+      module: 'User Management',
+      action: 'Delete User',
+      message: `User deleted: ${previousValues.name}`,
+      recordId: req.params.id,
+      createdBy: req.user._id
+    });
 
     res.json({
       success: true,
@@ -167,8 +232,26 @@ exports.toggleUserStatus = async (req, res) => {
       });
     }
 
+    const previousStatus = user.status;
     user.status = user.status === 'active' ? 'inactive' : 'active';
     await user.save();
+
+    await createAuditLog({
+      user: req.user,
+      moduleName: 'User Management',
+      actionType: 'status_change',
+      recordId: user._id,
+      previousValues: { status: previousStatus },
+      updatedValues: { status: user.status }
+    });
+
+    await sendNotification({
+      module: 'User Management',
+      action: 'Status Change',
+      message: `User ${user.name} ${user.status === 'active' ? 'activated' : 'deactivated'}`,
+      recordId: user._id,
+      createdBy: req.user._id
+    });
 
     res.json({
       success: true,

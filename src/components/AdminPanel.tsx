@@ -1,9 +1,14 @@
-import { useState } from 'react';
-import { Users, Shield, Settings, FileText, Plus, Edit2, Trash2, Check, X, Activity, Lock, Unlock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Users, Shield, Settings, FileText, Plus, Edit2, Trash2, Check, X, Activity, Lock, Unlock, Loader2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { userAPI, auditAPI, permissionAPI, notificationAPI } from '../api/client';
+import { ROLE_LABELS, ROLE_VALUES, formatRelativeTime } from '../utils/dataMappers';
+import { toast } from 'sonner@2.0.3';
+import ModuleInfoPanel, { MODULE_INFO } from './ModuleInfoPanel';
+import { useApp } from '../context/AppContext';
 
 interface User {
-  id: number;
+  id: string;
   name: string;
   email: string;
   role: string;
@@ -22,139 +27,152 @@ export default function AdminPanel({ initialTab = 'users' }: AdminPanelProps = {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('All Roles');
 
-  const [users, setUsers] = useState<User[]>([
-    { id: 1, name: 'Ahmed Khan', email: 'ahmed@bdport.gov.bd', role: 'Port Operator', status: 'active', lastLogin: '2 hours ago' },
-    { id: 2, name: 'Fatima Rahman', email: 'fatima@bdport.gov.bd', role: 'Berth Planner', status: 'active', lastLogin: '5 min ago' },
-    { id: 3, name: 'Karim Hassan', email: 'karim@bdport.gov.bd', role: 'Customs Officer', status: 'active', lastLogin: '1 day ago' },
-    { id: 4, name: 'Nazia Ahmed', email: 'nazia@bdport.gov.bd', role: 'Finance Manager', status: 'inactive', lastLogin: '3 days ago' },
-    { id: 5, name: 'Rahim Ali', email: 'rahim@bdport.gov.bd', role: 'Truck Driver', status: 'active', lastLogin: '10 min ago' },
-  ]);
-
-  // Permission Matrix State
-  const [permissions, setPermissions] = useState({
-    'admin': {
-      'Dashboard': { view: true, edit: true, delete: true, create: true },
-      'User Management': { view: true, edit: true, delete: true, create: true },
-      'Berth Planning': { view: true, edit: true, delete: true, create: true },
-      'Reefer Monitor': { view: true, edit: true, delete: true, create: true },
-      'Container Stack': { view: true, edit: true, delete: true, create: true },
-      'Ship Stowage': { view: true, edit: true, delete: true, create: true },
-      'Gate Operations': { view: true, edit: true, delete: true, create: true },
-      'Truck Booking': { view: true, edit: true, delete: true, create: true },
-      'Yard Density': { view: true, edit: true, delete: true, create: true },
-      'Rail Coordination': { view: true, edit: true, delete: true, create: true },
-      'Customs Clearance': { view: true, edit: true, delete: true, create: true },
-      'Billing & Tariff': { view: true, edit: true, delete: true, create: true },
-      'System Settings': { view: true, edit: true, delete: true, create: true },
-      'Audit Logs': { view: true, edit: false, delete: false, create: false },
-    },
-    'operator': {
-      'Dashboard': { view: true, edit: false, delete: false, create: false },
-      'User Management': { view: false, edit: false, delete: false, create: false },
-      'Berth Planning': { view: true, edit: true, delete: false, create: true },
-      'Reefer Monitor': { view: true, edit: true, delete: false, create: false },
-      'Container Stack': { view: true, edit: true, delete: false, create: true },
-      'Ship Stowage': { view: true, edit: false, delete: false, create: false },
-      'Gate Operations': { view: true, edit: true, delete: false, create: true },
-      'Truck Booking': { view: true, edit: true, delete: false, create: false },
-      'Yard Density': { view: true, edit: true, delete: false, create: false },
-      'Rail Coordination': { view: true, edit: true, delete: false, create: true },
-      'Customs Clearance': { view: true, edit: false, delete: false, create: false },
-      'Billing & Tariff': { view: true, edit: false, delete: false, create: false },
-      'System Settings': { view: false, edit: false, delete: false, create: false },
-      'Audit Logs': { view: false, edit: false, delete: false, create: false },
-    },
-    'berth': {
-      'Dashboard': { view: true, edit: false, delete: false, create: false },
-      'User Management': { view: false, edit: false, delete: false, create: false },
-      'Berth Planning': { view: true, edit: true, delete: true, create: true },
-      'Reefer Monitor': { view: true, edit: false, delete: false, create: false },
-      'Container Stack': { view: true, edit: false, delete: false, create: false },
-      'Ship Stowage': { view: true, edit: true, delete: false, create: true },
-      'Gate Operations': { view: true, edit: false, delete: false, create: false },
-      'Truck Booking': { view: true, edit: true, delete: false, create: false },
-      'Yard Density': { view: true, edit: false, delete: false, create: false },
-      'Rail Coordination': { view: true, edit: false, delete: false, create: false },
-      'Customs Clearance': { view: false, edit: false, delete: false, create: false },
-      'Billing & Tariff': { view: true, edit: false, delete: false, create: false },
-      'System Settings': { view: false, edit: false, delete: false, create: false },
-      'Audit Logs': { view: false, edit: false, delete: false, create: false },
-    },
-    'customs': {
-      'Dashboard': { view: true, edit: false, delete: false, create: false },
-      'User Management': { view: false, edit: false, delete: false, create: false },
-      'Berth Planning': { view: true, edit: false, delete: false, create: false },
-      'Reefer Monitor': { view: true, edit: false, delete: false, create: false },
-      'Container Stack': { view: true, edit: false, delete: false, create: false },
-      'Ship Stowage': { view: true, edit: false, delete: false, create: false },
-      'Gate Operations': { view: true, edit: false, delete: false, create: false },
-      'Truck Booking': { view: true, edit: false, delete: false, create: false },
-      'Yard Density': { view: true, edit: false, delete: false, create: false },
-      'Rail Coordination': { view: true, edit: false, delete: false, create: false },
-      'Customs Clearance': { view: true, edit: true, delete: false, create: true },
-      'Billing & Tariff': { view: true, edit: false, delete: false, create: false },
-      'System Settings': { view: false, edit: false, delete: false, create: false },
-      'Audit Logs': { view: true, edit: false, delete: false, create: false },
-    },
-    'finance': {
-      'Dashboard': { view: true, edit: false, delete: false, create: false },
-      'User Management': { view: false, edit: false, delete: false, create: false },
-      'Berth Planning': { view: true, edit: false, delete: false, create: false },
-      'Reefer Monitor': { view: true, edit: false, delete: false, create: false },
-      'Container Stack': { view: true, edit: false, delete: false, create: false },
-      'Ship Stowage': { view: true, edit: false, delete: false, create: false },
-      'Gate Operations': { view: true, edit: false, delete: false, create: false },
-      'Truck Booking': { view: true, edit: false, delete: false, create: false },
-      'Yard Density': { view: true, edit: false, delete: false, create: false },
-      'Rail Coordination': { view: true, edit: false, delete: false, create: false },
-      'Customs Clearance': { view: true, edit: false, delete: false, create: false },
-      'Billing & Tariff': { view: true, edit: true, delete: true, create: true },
-      'System Settings': { view: false, edit: false, delete: false, create: false },
-      'Audit Logs': { view: true, edit: false, delete: false, create: false },
-    },
-    'truck': {
-      'Dashboard': { view: true, edit: false, delete: false, create: false },
-      'User Management': { view: false, edit: false, delete: false, create: false },
-      'Berth Planning': { view: false, edit: false, delete: false, create: false },
-      'Reefer Monitor': { view: false, edit: false, delete: false, create: false },
-      'Container Stack': { view: false, edit: false, delete: false, create: false },
-      'Ship Stowage': { view: false, edit: false, delete: false, create: false },
-      'Gate Operations': { view: true, edit: false, delete: false, create: false },
-      'Truck Booking': { view: true, edit: true, delete: false, create: true },
-      'Yard Density': { view: false, edit: false, delete: false, create: false },
-      'Rail Coordination': { view: false, edit: false, delete: false, create: false },
-      'Customs Clearance': { view: false, edit: false, delete: false, create: false },
-      'Billing & Tariff': { view: true, edit: false, delete: false, create: false },
-      'System Settings': { view: false, edit: false, delete: false, create: false },
-      'Audit Logs': { view: false, edit: false, delete: false, create: false },
-    },
-  });
-
+  const [loading, setLoading] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [permissions, setPermissions] = useState<Record<string, Record<string, any>>>({});
   const [selectedRole, setSelectedRole] = useState<string>('admin');
+  const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'operator' });
+  const [editForm, setEditForm] = useState({ name: '', email: '', role: 'operator', status: 'active' });
 
-  const togglePermission = (role: string, module: string, permType: 'view' | 'edit' | 'delete' | 'create') => {
-    setPermissions(prev => ({
-      ...prev,
-      [role]: {
-        ...prev[role as keyof typeof prev],
-        [module]: {
-          ...prev[role as keyof typeof prev][module],
-          [permType]: !prev[role as keyof typeof prev][module][permType]
-        }
+  const loadUsers = async () => {
+    try {
+      const res = await userAPI.getAll();
+      if (res.data.success) {
+        setUsers(res.data.data.map((u: any) => ({
+          id: u._id,
+          name: u.name,
+          email: u.email,
+          role: ROLE_LABELS[u.role] || u.role,
+          status: u.status,
+          lastLogin: u.lastLogin ? formatRelativeTime(u.lastLogin) : 'Never',
+        })));
       }
-    }));
-  };
-
-  const handleDeleteUser = (id: number) => {
-    if (confirm('Are you sure you want to delete this user?')) {
-      setUsers(users.filter(u => u.id !== id));
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to load users');
     }
   };
 
-  const handleToggleStatus = (id: number) => {
-    setUsers(users.map(u => 
-      u.id === id ? { ...u, status: u.status === 'active' ? 'inactive' : 'active' } : u
-    ));
+  const loadAuditLogs = async () => {
+    try {
+      const res = await auditAPI.getAll({ limit: 50 });
+      if (res.data.success) {
+        setAuditLogs(res.data.data.map((log: any) => ({
+          id: log._id,
+          user: log.username,
+          action: log.description || `${log.actionType} on ${log.moduleName}`,
+          timestamp: formatRelativeTime(log.timestamp),
+          type: log.actionType,
+        })));
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to load audit logs');
+    }
+  };
+
+  const loadPermissions = async () => {
+    try {
+      const res = await permissionAPI.getAll();
+      if (res.data.success) {
+        const perms: Record<string, Record<string, any>> = {};
+        res.data.data.forEach((p: any) => { perms[p.role] = p.modules; });
+        setPermissions(perms);
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to load permissions');
+    }
+  };
+
+  useEffect(() => {
+    loadUsers();
+    loadAuditLogs();
+    loadPermissions();
+  }, []);
+
+  const togglePermission = async (role: string, module: string, permType: 'view' | 'edit' | 'delete' | 'create') => {
+    const updated = {
+      ...permissions,
+      [role]: {
+        ...permissions[role],
+        [module]: {
+          ...permissions[role]?.[module],
+          [permType]: !permissions[role]?.[module]?.[permType]
+        }
+      }
+    };
+    setPermissions(updated);
+    try {
+      await permissionAPI.updateRole(role, updated[role]);
+      toast.success('Permissions updated');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to update permissions');
+      loadPermissions();
+    }
+  };
+
+  const handleDeleteUser = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this user?')) return;
+    try {
+      await userAPI.delete(id);
+      toast.success('User deleted');
+      await loadUsers();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to delete user');
+    }
+  };
+
+  const handleToggleStatus = async (id: string) => {
+    try {
+      await userAPI.toggleStatus(id);
+      toast.success('User status updated');
+      await loadUsers();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to update status');
+    }
+  };
+
+  const handleCreateUser = async () => {
+    if (!newUser.name || !newUser.email || !newUser.password) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+    setLoading(true);
+    try {
+      await userAPI.create(newUser);
+      toast.success('User created successfully');
+      setShowAddUser(false);
+      setNewUser({ name: '', email: '', password: '', role: 'operator' });
+      await loadUsers();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to create user');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingUser) return;
+    setLoading(true);
+    try {
+      await userAPI.update(editingUser.id, {
+        name: editForm.name,
+        email: editForm.email,
+        role: ROLE_VALUES[editForm.role] || editForm.role,
+        status: editForm.status,
+      });
+      toast.success('User updated successfully');
+      setEditingUser(null);
+      await loadUsers();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to update user');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openEditUser = (user: User) => {
+    setEditingUser(user);
+    setEditForm({ name: user.name, email: user.email, role: user.role, status: user.status });
   };
 
   // Filter users based on search query and role filter
@@ -168,30 +186,17 @@ export default function AdminPanel({ initialTab = 'users' }: AdminPanelProps = {
     return matchesSearch && matchesRole;
   });
 
-  const auditLogs = [
-    { id: 1, user: 'Ahmed Khan', action: 'Updated container TCLU4567890 status', timestamp: '2 min ago', type: 'update' },
-    { id: 2, user: 'Fatima Rahman', action: 'Created berth assignment for MV HARMONY', timestamp: '15 min ago', type: 'create' },
-    { id: 3, user: 'System', action: 'Automatic gate closure initiated', timestamp: '1 hour ago', type: 'system' },
-    { id: 4, user: 'Karim Hassan', action: 'Approved customs clearance for 23 containers', timestamp: '2 hours ago', type: 'approval' },
-    { id: 5, user: 'Admin', action: 'User role modified: Nazia Ahmed', timestamp: '5 hours ago', type: 'security' },
-  ];
-
-  const systemStats = [
-    { time: '00:00', users: 12 },
-    { time: '04:00', users: 8 },
-    { time: '08:00', users: 45 },
-    { time: '12:00', users: 52 },
-    { time: '16:00', users: 38 },
-    { time: '20:00', users: 25 },
-    { time: '23:59', users: 15 },
-  ];
-
   const kpiData = [
-    { label: 'Yard Density', value: '72%', trend: '+5%', color: '#00ff88', status: 'normal' },
-    { label: 'Crane Utilization', value: '84%', trend: '+12%', color: '#00d4ff', status: 'good' },
-    { label: 'Avg Gate Time', value: '18 min', trend: '-8%', color: '#ffd700', status: 'good' },
-    { label: 'Demurrage Revenue', value: '$45.2K', trend: '+23%', color: '#ff6b35', status: 'high' },
+    { label: 'Total Users', value: String(users.length), trend: '', color: '#00ff88', status: 'normal' },
+    { label: 'Active Users', value: String(users.filter(u => u.status === 'active').length), trend: '', color: '#00d4ff', status: 'good' },
+    { label: 'Audit Events', value: String(auditLogs.length), trend: '', color: '#ffd700', status: 'good' },
+    { label: 'Roles Configured', value: String(Object.keys(permissions).length), trend: '', color: '#ff6b35', status: 'high' },
   ];
+
+  const systemStats = auditLogs.slice(0, 7).map((log, i) => ({
+    time: `${i * 4}:00`,
+    users: auditLogs.length - i
+  }));
 
   const roleColors: { [key: string]: string } = {
     'Port Operator': '#00ff88',
@@ -315,18 +320,21 @@ export default function AdminPanel({ initialTab = 'users' }: AdminPanelProps = {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <input
                     type="text"
-                    defaultValue={editingUser.name}
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                     placeholder="Full Name"
                     className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
                   />
                   <input
                     type="email"
-                    defaultValue={editingUser.email}
+                    value={editForm.email}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
                     placeholder="Email Address"
                     className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
                   />
                   <select
-                    defaultValue={editingUser.role}
+                    value={editForm.role}
+                    onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
                     className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
                   >
                     <option>Port Operator</option>
@@ -334,10 +342,11 @@ export default function AdminPanel({ initialTab = 'users' }: AdminPanelProps = {
                     <option>Customs Officer</option>
                     <option>Finance Manager</option>
                     <option>Truck Driver</option>
-                    <option>Admin</option>
+                    <option>Administrator</option>
                   </select>
                   <select
-                    defaultValue={editingUser.status}
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
                     className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
                   >
                     <option value="active">Active</option>
@@ -352,13 +361,11 @@ export default function AdminPanel({ initialTab = 'users' }: AdminPanelProps = {
                     Cancel
                   </button>
                   <button
-                    onClick={() => {
-                      alert('User updated successfully!');
-                      setEditingUser(null);
-                    }}
+                    onClick={handleSaveEdit}
+                    disabled={loading}
                     className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
                   >
-                    Save Changes
+                    {loading ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </div>
@@ -372,24 +379,34 @@ export default function AdminPanel({ initialTab = 'users' }: AdminPanelProps = {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <input
                   type="text"
+                  value={newUser.name}
+                  onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
                   placeholder="Full Name"
                   className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                 />
                 <input
                   type="email"
+                  value={newUser.email}
+                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
                   placeholder="Email Address"
                   className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                 />
-                <select className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500">
-                  <option>Select Role</option>
-                  <option>Port Operator</option>
-                  <option>Berth Planner</option>
-                  <option>Customs Officer</option>
-                  <option>Finance Manager</option>
-                  <option>Truck Driver</option>
+                <select
+                  value={newUser.role}
+                  onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+                  className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="operator">Port Operator</option>
+                  <option value="berth">Berth Planner</option>
+                  <option value="customs">Customs Officer</option>
+                  <option value="finance">Finance Manager</option>
+                  <option value="truck">Truck Driver</option>
+                  <option value="admin">Administrator</option>
                 </select>
                 <input
                   type="password"
+                  value={newUser.password}
+                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
                   placeholder="Initial Password"
                   className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                 />
@@ -401,8 +418,12 @@ export default function AdminPanel({ initialTab = 'users' }: AdminPanelProps = {
                 >
                   Cancel
                 </button>
-                <button className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors">
-                  Create User
+                <button
+                  onClick={handleCreateUser}
+                  disabled={loading}
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors"
+                >
+                  {loading ? 'Creating...' : 'Create User'}
                 </button>
               </div>
             </div>
@@ -456,7 +477,7 @@ export default function AdminPanel({ initialTab = 'users' }: AdminPanelProps = {
                       <td className="px-4 sm:px-6 py-4">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => setEditingUser(user)}
+                            onClick={() => openEditUser(user)}
                             className="p-2 hover:bg-blue-500/20 text-blue-400 rounded-lg transition-colors"
                             title="Edit user"
                           >
@@ -907,6 +928,8 @@ export default function AdminPanel({ initialTab = 'users' }: AdminPanelProps = {
           </div>
         </div>
       )}
+
+      <ModuleInfoPanel content={MODULE_INFO.admin} />
     </div>
   );
 }

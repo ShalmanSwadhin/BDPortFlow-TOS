@@ -1,0 +1,26 @@
+{
+  "base_url": "http://localhost:5173",
+  "api_url": "http://localhost:5000/api",
+  "credentials": {
+    "admin": {
+      "email": "admin@bdport.gov.bd",
+      "password": "admin123",
+      "role": "admin"
+    }
+  },
+  "users": {
+    "new_user": {
+      "name": "Sample User",
+      "email": "sample@bdport.gov.bd",
+      "password": "Sample1234",
+      "role": "operator"
+    }
+  },
+  "truck_booking": {
+    "truck": "DHK-SAMPLE-001",
+    "container": "TCLU0000001",
+    "driver": "Sample Driver",
+    "contact": "+8801711111111",
+    "operationType": "Container Delivery"
+  }
+}

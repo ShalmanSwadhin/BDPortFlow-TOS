@@ -9,72 +9,43 @@ interface MobileTaskDetailProps {
 }
 
 export default function MobileTaskDetail({ task, onClose, userRole }: MobileTaskDetailProps) {
-  const { updateContainer, updateVessel, updateBooking, addNotification } = useApp();
+  const { updateContainer, updateVessel, updateBooking, refreshAllData } = useApp();
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     if (task.type === 'clearance') {
-      updateContainer(task.data.id, { status: 'ready' });
-      addNotification({
-        type: 'success',
-        message: `Container ${task.data.id} cleared and approved`,
-      });
+      await updateContainer(task.data.id, { status: 'ready' });
     }
     toast.success(`${task.title} approved successfully`);
+    await refreshAllData();
     setTimeout(onClose, 500);
   };
 
   const handleReject = () => {
-    if (task.type === 'clearance') {
-      addNotification({
-        type: 'warning',
-        message: `Container ${task.data.id} clearance rejected - requires review`,
-      });
-    }
     toast.error(`${task.title} rejected`);
     setTimeout(onClose, 500);
   };
 
-  const handleDispatch = () => {
+  const handleDispatch = async () => {
     if (task.type === 'reefer') {
-      addNotification({
-        type: 'info',
-        message: `Technician dispatched to ${task.title} at ${task.data.location}`,
-      });
-      updateContainer(task.data.id, { alarm: false });
+      await updateContainer(task.data.id, { alarm: false });
     }
     toast.success(`Technician dispatched to ${task.title}`);
     setTimeout(onClose, 500);
   };
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     if (task.type === 'vessel') {
-      updateVessel(task.data.id, { progress: Math.min(task.data.progress + 10, 100) });
-      addNotification({
-        type: 'info',
-        message: `${task.data.name} schedule updated - progress ${Math.min(task.data.progress + 10, 100)}%`,
-      });
+      await updateVessel(task.data.id, { progress: Math.min(task.data.progress + 10, 100) });
     } else if (task.type === 'reefer') {
-      updateContainer(task.data.id, { 
+      await updateContainer(task.data.id, {
         temperature: task.data.targetTemp,
-        alarm: false 
-      });
-      addNotification({
-        type: 'success',
-        message: `Temperature adjusted for ${task.data.id} to ${task.data.targetTemp}°C`,
+        alarm: false
       });
     } else if (task.type === 'booking') {
-      updateBooking(task.data.id, { status: 'completed' });
-      addNotification({
-        type: 'success',
-        message: `Booking ${task.data.container} marked as completed`,
-      });
-    } else if (task.type === 'invoice') {
-      addNotification({
-        type: 'success',
-        message: `Payment recorded for ${task.data.id} - $${task.data.amount.toLocaleString()}`,
-      });
+      await updateBooking(task.data.id, { status: 'Completed' });
     }
     toast.success(`${task.title} updated successfully`);
+    await refreshAllData();
     setTimeout(onClose, 500);
   };
 

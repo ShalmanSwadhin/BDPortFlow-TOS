@@ -1,97 +1,142 @@
-import { useState } from 'react';
-import { Ship, Anchor, AlertTriangle, Calendar, Clock, Waves, X, Save, Package, Truck, MapPin } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { useApp } from '../context/AppContext';
+import { vesselAPI, berthAPI } from '../api/client';
+import { mapVesselFromApi, VESSEL_STATUSES, VESSEL_STATUS_LABELS } from '../utils/dataMappers';
+import ModuleInfoPanel, { MODULE_INFO } from './ModuleInfoPanel';
+import { Ship, Anchor, AlertTriangle, Calendar, Clock, Waves, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import BerthTimeline from './BerthTimeline';
 
+const BERTH_SPECS = [
+  { id: 1, length: 300, depth: 15 },
+  { id: 2, length: 380, depth: 16 },
+  { id: 3, length: 350, depth: 15.5 },
+  { id: 4, length: 320, depth: 14 },
+  { id: 5, length: 280, depth: 13 },
+];
+
 export default function BerthPlanner() {
+  const { vessels, refreshAllData, isLoading } = useApp();
   const [selectedVessel, setSelectedVessel] = useState<any>(null);
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [showModifySchedule, setShowModifySchedule] = useState(false);
   const [showStowageView, setShowStowageView] = useState(false);
-  const [scheduleData, setScheduleData] = useState({
+  const [apiBerths, setApiBerths] = useState<any[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [scheduleForm, setScheduleForm] = useState({
+    vesselName: '',
+    imoNumber: '',
+    length: '',
+    draft: '',
     eta: '',
     etd: '',
     berth: '',
-    priority: 'normal',
-    notes: ''
+    cargoType: 'Container',
+    totalContainers: '',
+    status: 'incoming',
   });
 
-  const vessels = [
-    {
-      id: 1,
-      name: 'MV HARMONY',
-      length: 280,
-      draft: 12.5,
-      eta: '14:30',
-      etd: '18:00',
-      berth: 1,
-      status: 'loading',
-      cargo: 'Container',
-      containers: 245,
-      progress: 65,
-      color: '#00ff88',
-    },
-    {
-      id: 2,
-      name: 'MSC AURORA',
-      length: 350,
-      draft: 14.2,
-      eta: '16:00',
-      etd: '22:00',
-      berth: 2,
-      status: 'unloading',
-      cargo: 'Container',
-      containers: 412,
-      progress: 45,
-      color: '#00d4ff',
-    },
-    {
-      id: 3,
-      name: 'MAERSK LIBERTY',
-      length: 320,
-      draft: 13.8,
-      eta: '09:00',
-      etd: '15:00',
-      berth: 3,
-      status: 'loading',
-      cargo: 'Container',
-      containers: 328,
-      progress: 85,
-      color: '#ffd700',
-    },
-    {
-      id: 4,
-      name: 'EVERGREEN PRIDE',
-      length: 290,
-      draft: 13.0,
-      eta: 'Tomorrow 08:00',
-      etd: 'Tomorrow 16:00',
-      berth: null,
-      status: 'incoming',
-      cargo: 'Container',
-      containers: 298,
-      progress: 0,
-      color: '#ff6b35',
-    },
-  ];
+  useEffect(() => {
+    const loadBerths = async () => {
+      try {
+        const res = await berthAPI.getAll();
+        if (res.data.success) setApiBerths(res.data.data || []);
+      } catch (err: any) {
+        toast.error('Failed to load berths', { description: err.response?.data?.message || err.message });
+      }
+    };
+    loadBerths();
+  }, [vessels]);
 
-  const berths = [
-    { id: 1, length: 300, depth: 15, status: 'occupied', vessel: vessels[0] },
-    { id: 2, length: 380, depth: 16, status: 'occupied', vessel: vessels[1] },
-    { id: 3, length: 350, depth: 15.5, status: 'occupied', vessel: vessels[2] },
-    { id: 4, length: 320, depth: 14, status: 'available', vessel: null },
-    { id: 5, length: 280, depth: 13, status: 'maintenance', vessel: null },
-  ];
-
-  const timeSlots = [
-    '00:00', '02:00', '04:00', '06:00', '08:00', '10:00', '12:00',
-    '14:00', '16:00', '18:00', '20:00', '22:00'
-  ];
+  const berths = useMemo(() => {
+    return (apiBerths.length ? apiBerths : BERTH_SPECS.map(s => ({ berthNumber: `Berth-${s.id}`, status: 'available', vessel: null }))).map((b: any, i: number) => {
+      const spec = BERTH_SPECS[i] || BERTH_SPECS[0];
+      const berthNum = parseInt(String(b.berthNumber || '').replace(/\D/g, ''), 10) || spec.id;
+      const vessel = b.vessel ? mapVesselFromApi(b.vessel, i) : vessels.find(v => v.berthNumber === b.berthNumber || v.berth === berthNum) || null;
+      return {
+        id: berthNum,
+        berthNumber: b.berthNumber || `Berth-${berthNum}`,
+        length: spec.length,
+        depth: spec.depth,
+        status: b.status === 'occupied' || vessel ? 'occupied' : 'available',
+        vessel,
+      };
+    });
+  }, [apiBerths, vessels]);
 
   const getBerthUtilization = () => {
+    if (!berths.length) return 0;
     const occupied = berths.filter(b => b.status === 'occupied').length;
     return Math.round((occupied / berths.length) * 100);
   };
+
+  const handleScheduleVessel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!scheduleForm.vesselName || !scheduleForm.length || !scheduleForm.draft || !scheduleForm.eta || !scheduleForm.etd) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      const berthNumber = scheduleForm.berth ? `Berth-${scheduleForm.berth.replace(/\D/g, '')}` : 'Berth-4';
+      const vesselData = {
+        vesselName: scheduleForm.vesselName,
+        imoNumber: scheduleForm.imoNumber,
+        length: parseFloat(scheduleForm.length),
+        breadth: parseFloat(scheduleForm.length) * 0.15,
+        draft: parseFloat(scheduleForm.draft),
+        berthNumber,
+        eta: new Date(scheduleForm.eta).toISOString(),
+        etd: new Date(scheduleForm.etd).toISOString(),
+        vesselType: scheduleForm.cargoType,
+        totalContainers: parseInt(scheduleForm.totalContainers, 10) || 0,
+        status: scheduleForm.status || 'incoming',
+      };
+      const res = await vesselAPI.create(vesselData);
+      if (res.data.success && scheduleForm.berth) {
+        await berthAPI.assign({ vesselId: res.data.data._id, berthNumber });
+      }
+      toast.success('Vessel scheduled successfully');
+      setShowScheduleForm(false);
+      await refreshAllData();
+      const berthRes = await berthAPI.getAll();
+      if (berthRes.data.success) setApiBerths(berthRes.data.data || []);
+    } catch (err: any) {
+      toast.error('Failed to schedule vessel', { description: err.response?.data?.message || err.message });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleModifySchedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedVessel) return;
+    try {
+      setSubmitting(true);
+      await vesselAPI.update(String(selectedVessel.id), {
+        eta: new Date(scheduleForm.eta).toISOString(),
+        etd: new Date(scheduleForm.etd).toISOString(),
+        status: scheduleForm.status,
+      });
+      toast.success('Schedule updated', { description: `${selectedVessel.name} schedule modified` });
+      setShowModifySchedule(false);
+      await refreshAllData();
+    } catch (err: any) {
+      toast.error('Failed to update schedule', { description: err.response?.data?.message || err.message });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const incomingCount = vessels.filter(v => v.status === 'incoming' || !v.berth).length;
+
+  if (isLoading && !vessels.length) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -124,23 +169,23 @@ export default function BerthPlanner() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <Ship className="w-5 h-5 text-emerald-400 mb-2" />
-          <div className="text-2xl text-emerald-400 mb-1">8</div>
+          <div className="text-2xl text-emerald-400 mb-1">{vessels.filter(v => v.berth).length}</div>
           <div className="text-slate-400 text-sm">Vessels in Port</div>
         </div>
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <Anchor className="w-5 h-5 text-blue-400 mb-2" />
-          <div className="text-2xl text-blue-400 mb-1">3</div>
+          <div className="text-2xl text-blue-400 mb-1">{incomingCount}</div>
           <div className="text-slate-400 text-sm">Incoming Today</div>
         </div>
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <Clock className="w-5 h-5 text-yellow-400 mb-2" />
-          <div className="text-2xl text-yellow-400 mb-1">18.5h</div>
-          <div className="text-slate-400 text-sm">Avg Turnaround</div>
+          <div className="text-2xl text-yellow-400 mb-1">{getBerthUtilization()}%</div>
+          <div className="text-slate-400 text-sm">Berth Utilization</div>
         </div>
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <AlertTriangle className="w-5 h-5 text-orange-400 mb-2" />
-          <div className="text-2xl text-orange-400 mb-1">1</div>
-          <div className="text-slate-400 text-sm">Berth Conflict</div>
+          <div className="text-2xl text-orange-400 mb-1">{berths.filter(b => b.status === 'available').length}</div>
+          <div className="text-slate-400 text-sm">Available Berths</div>
         </div>
       </div>
 
@@ -288,11 +333,11 @@ export default function BerthPlanner() {
                 </div>
                 <div>
                   <div className="text-slate-400 text-sm mb-1">ETA</div>
-                  <div className="text-slate-200">{selectedVessel.eta}</div>
+                  <div className="text-slate-200">{selectedVessel.etaLabel || selectedVessel.eta}</div>
                 </div>
                 <div>
                   <div className="text-slate-400 text-sm mb-1">ETD</div>
-                  <div className="text-slate-200">{selectedVessel.etd}</div>
+                  <div className="text-slate-200">{selectedVessel.etdLabel || selectedVessel.etd}</div>
                 </div>
                 <div>
                   <div className="text-slate-400 text-sm mb-1">Cargo Type</div>
@@ -330,11 +375,14 @@ export default function BerthPlanner() {
 
               {/* Actions */}
               <div className="flex gap-3 mt-6">
-                <button 
+                <button
                   onClick={() => {
-                    toast.info('Schedule modification', {
-                      description: `Opening editor for ${selectedVessel.name}`,
-                    });
+                    setScheduleForm(prev => ({
+                      ...prev,
+                      vesselName: selectedVessel.name,
+                      eta: selectedVessel.raw?.eta ? new Date(selectedVessel.raw.eta).toISOString().slice(0, 16) : '',
+                      etd: selectedVessel.raw?.etd ? new Date(selectedVessel.raw.etd).toISOString().slice(0, 16) : '',
+                    }));
                     setShowModifySchedule(true);
                   }}
                   className="flex-1 px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/50 rounded-lg transition-colors"
@@ -369,7 +417,7 @@ export default function BerthPlanner() {
           </div>
 
           <div className="space-y-3">
-            {vessels.filter(v => v.status === 'incoming').map((vessel) => (
+            {vessels.filter(v => v.status === 'incoming' || !v.berth).map((vessel) => (
               <div
                 key={vessel.id}
                 className="p-4 bg-slate-800/50 border border-slate-700 rounded-lg hover:border-slate-600 transition-all cursor-pointer"
@@ -387,7 +435,7 @@ export default function BerthPlanner() {
                 <div className="grid grid-cols-3 gap-4 text-sm">
                   <div>
                     <div className="text-slate-500 text-xs">ETA</div>
-                    <div className="text-slate-300">{vessel.eta}</div>
+                    <div className="text-slate-300">{vessel.etaLabel || vessel.eta}</div>
                   </div>
                   <div>
                     <div className="text-slate-500 text-xs">Length</div>
@@ -460,13 +508,15 @@ export default function BerthPlanner() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-emerald-500/50 rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl text-emerald-400 mb-6">Schedule New Vessel</h3>
-            <form className="space-y-4">
+            <form className="space-y-4" onSubmit={handleScheduleVessel}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-slate-400 text-sm mb-2">Vessel Name *</label>
                   <input
                     type="text"
                     placeholder="MV EXAMPLE"
+                    value={scheduleForm.vesselName}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, vesselName: e.target.value })}
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                     required
                   />
@@ -476,6 +526,8 @@ export default function BerthPlanner() {
                   <input
                     type="text"
                     placeholder="IMO 1234567"
+                    value={scheduleForm.imoNumber}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, imoNumber: e.target.value })}
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
@@ -484,6 +536,8 @@ export default function BerthPlanner() {
                   <input
                     type="number"
                     placeholder="280"
+                    value={scheduleForm.length}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, length: e.target.value })}
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                     required
                   />
@@ -494,6 +548,8 @@ export default function BerthPlanner() {
                     type="number"
                     step="0.1"
                     placeholder="12.5"
+                    value={scheduleForm.draft}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, draft: e.target.value })}
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                     required
                   />
@@ -502,6 +558,8 @@ export default function BerthPlanner() {
                   <label className="block text-slate-400 text-sm mb-2">ETA *</label>
                   <input
                     type="datetime-local"
+                    value={scheduleForm.eta}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, eta: e.target.value })}
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                     required
                   />
@@ -510,24 +568,35 @@ export default function BerthPlanner() {
                   <label className="block text-slate-400 text-sm mb-2">ETD *</label>
                   <input
                     type="datetime-local"
+                    value={scheduleForm.etd}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, etd: e.target.value })}
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                     required
                   />
                 </div>
                 <div>
                   <label className="block text-slate-400 text-sm mb-2">Preferred Berth</label>
-                  <select className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500">
+                  <select
+                    value={scheduleForm.berth}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, berth: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
+                  >
                     <option value="">Auto Assign</option>
-                    <option>Berth 1</option>
-                    <option>Berth 2</option>
-                    <option>Berth 3</option>
-                    <option>Berth 4</option>
-                    <option>Berth 5</option>
+                    <option value="1">Berth 1</option>
+                    <option value="2">Berth 2</option>
+                    <option value="3">Berth 3</option>
+                    <option value="4">Berth 4</option>
+                    <option value="5">Berth 5</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-slate-400 text-sm mb-2">Cargo Type *</label>
-                  <select className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500" required>
+                  <select
+                    value={scheduleForm.cargoType}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, cargoType: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
+                    required
+                  >
                     <option>Container</option>
                     <option>Bulk Cargo</option>
                     <option>Break Bulk</option>
@@ -535,29 +604,27 @@ export default function BerthPlanner() {
                   </select>
                 </div>
                 <div>
+                  <label className="block text-slate-400 text-sm mb-2">Vessel Status</label>
+                  <select
+                    value={scheduleForm.status}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, status: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
+                  >
+                    {VESSEL_STATUSES.map(s => (
+                      <option key={s.value} value={s.value}>{s.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
                   <label className="block text-slate-400 text-sm mb-2">Expected Containers</label>
                   <input
                     type="number"
                     placeholder="245"
+                    value={scheduleForm.totalContainers}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, totalContainers: e.target.value })}
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
-                <div>
-                  <label className="block text-slate-400 text-sm mb-2">Agent</label>
-                  <input
-                    type="text"
-                    placeholder="Shipping Agent Name"
-                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-slate-400 text-sm mb-2">Special Requirements</label>
-                <textarea
-                  rows={3}
-                  placeholder="Enter any special handling requirements..."
-                  className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
-                ></textarea>
               </div>
               <div className="flex justify-end gap-3 pt-4">
                 <button
@@ -569,13 +636,10 @@ export default function BerthPlanner() {
                 </button>
                 <button
                   type="submit"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    alert('Vessel scheduled successfully!');
-                    setShowScheduleForm(false);
-                  }}
-                  className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors"
+                  disabled={submitting}
+                  className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                   Schedule Vessel
                 </button>
               </div>
@@ -698,12 +762,9 @@ export default function BerthPlanner() {
                 </button>
                 <button
                   type="submit"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    alert('Vessel schedule modified successfully!');
-                    setShowModifySchedule(false);
-                  }}
-                  className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors"
+                  onClick={handleModifySchedule}
+                  disabled={submitting}
+                  className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors disabled:opacity-50"
                 >
                   Save Changes
                 </button>
@@ -1004,6 +1065,8 @@ export default function BerthPlanner() {
           </div>
         </div>
       )}
+
+      <ModuleInfoPanel content={MODULE_INFO.berth} />
     </div>
   );
 }

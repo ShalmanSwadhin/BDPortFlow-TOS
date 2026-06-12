@@ -84,5 +84,12 @@ truckSchema.pre('save', function(next) {
 truckSchema.index({ truckNumber: 1 });
 truckSchema.index({ status: 1 });
 truckSchema.index({ appointmentDate: 1 });
+truckSchema.index(
+  { truckNumber: 1, appointmentDate: 1, appointmentTime: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: { $nin: ['Cancelled'] } }
+  }
+);
 
 module.exports = mongoose.model('Truck', truckSchema);

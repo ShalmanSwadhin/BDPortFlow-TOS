@@ -2,12 +2,13 @@ import { Ship as ShipIcon } from 'lucide-react';
 import svgPaths from '../imports/svg-1rcp9lhow4';
 
 interface Vessel {
-  id: number;
+  id: number | string;
   name: string;
   eta: string;
   etd: string;
   progress: number;
   color: string;
+  raw?: { eta?: string; etd?: string };
 }
 
 interface Berth {
@@ -35,15 +36,29 @@ export default function BerthTimeline({ berths }: BerthTimelineProps) {
     return (totalMinutes / (24 * 60)) * 100;
   };
 
+  const getDatePosition = (value?: string | Date) => {
+    if (!value) return 0;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 0;
+    const totalMinutes = date.getHours() * 60 + date.getMinutes();
+    return (totalMinutes / (24 * 60)) * 100;
+  };
+
   const getVesselPosition = (vessel: Vessel | null) => {
-    if (!vessel) return { left: 0, width: 0 };
-    
-    const startPos = getTimePosition(vessel.eta);
-    const endPos = getTimePosition(vessel.etd);
-    
+    if (!vessel) return { left: '0%', width: '0%' };
+
+    const etaRaw = vessel.raw?.eta;
+    const etdRaw = vessel.raw?.etd;
+    let startPos = etaRaw ? getDatePosition(etaRaw) : getTimePosition(vessel.eta);
+    let endPos = etdRaw ? getDatePosition(etdRaw) : getTimePosition(vessel.etd);
+
+    if (endPos <= startPos) {
+      endPos = Math.min(100, startPos + 20);
+    }
+
     return {
       left: `${startPos}%`,
-      width: `${endPos - startPos}%`
+      width: `${Math.max(endPos - startPos, 8)}%`,
     };
   };
 

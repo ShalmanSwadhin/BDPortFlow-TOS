@@ -1,62 +1,70 @@
-import { useState } from 'react';
-import { Train, Package, AlertTriangle, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { useApp } from '../context/AppContext';
+import { railAPI } from '../api/client';
+import ModuleInfoPanel, { MODULE_INFO } from './ModuleInfoPanel';
+import { Train, Package, AlertTriangle, Clock, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 
+function formatTime(dateStr?: string) {
+  if (!dateStr) return '—';
+  return new Date(dateStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function mapRailToTrain(rail: any) {
+  const statusMap: Record<string, string> = {
+    Scheduled: 'scheduled',
+    Loading: 'loading',
+    Departed: 'departed',
+    Delayed: 'incoming',
+    Cancelled: 'scheduled',
+  };
+  const containers = (rail.containers || []).map((c: any) => ({
+    id: c.containerId,
+    status: rail.status === 'Departed' ? 'loaded' : rail.status === 'Loading' ? 'loading' : 'assigned',
+    destination: rail.destination,
+    weight: c.weight ? (c.weight > 100 ? c.weight / 1000 : c.weight) : 0,
+  }));
+  const assigned = rail.loaded ?? containers.length;
+  const progress = rail.capacity > 0 ? Math.round((assigned / rail.capacity) * 100) : 0;
+  return {
+    id: rail.trainNumber,
+    _id: rail._id,
+    arrival: formatTime(rail.estimatedArrival),
+    departure: formatTime(rail.departureTime),
+    status: statusMap[rail.status] || 'scheduled',
+    progress: rail.status === 'Loading' ? progress : 0,
+    containers,
+    capacity: rail.capacity,
+    assigned,
+    route: rail.route || rail.destination,
+    raw: rail,
+  };
+}
+
 export default function RailCoordination() {
+  const { rails, refreshAllData, isLoading } = useApp();
   const [selectedTrain, setSelectedTrain] = useState<any>(null);
   const [showFullDetails, setShowFullDetails] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [newTrain, setNewTrain] = useState({
     trainId: '',
     arrival: '',
     departure: '',
     route: '',
+    destination: '',
     capacity: '20',
     notes: ''
   });
 
-  const trains = [
-    {
-      id: 'RT-001',
-      arrival: '14:30',
-      departure: '16:00',
-      status: 'loading',
-      progress: 65,
-      containers: [
-        { id: 'TCLU3456789', status: 'loaded', destination: 'Dhaka', weight: 22.5 },
-        { id: 'YMMU8901234', status: 'loaded', destination: 'Dhaka', weight: 24.8 },
-        { id: 'MAEU5678901', status: 'loading', destination: 'Dhaka', weight: 20.2 },
-        { id: 'CSQU2345678', status: 'pending', destination: 'Dhaka', weight: 23.1 },
-        { id: 'HLBU7890123', status: 'pending', destination: 'Dhaka', weight: 25.3 },
-      ],
-      capacity: 20,
-      assigned: 5,
-    },
-    {
-      id: 'RT-002',
-      arrival: '16:30',
-      departure: '18:00',
-      status: 'incoming',
-      progress: 0,
-      containers: [
-        { id: 'TCKU4567890', status: 'assigned', destination: 'Sylhet', weight: 21.7 },
-        { id: 'OOLU1234567', status: 'assigned', destination: 'Sylhet', weight: 19.8 },
-        { id: 'MSCU8901234', status: 'assigned', destination: 'Sylhet', weight: 24.2 },
-      ],
-      capacity: 20,
-      assigned: 3,
-    },
-    {
-      id: 'RT-003',
-      arrival: '18:00',
-      departure: '19:30',
-      status: 'scheduled',
-      progress: 0,
-      containers: [],
-      capacity: 20,
-      assigned: 0,
-    },
-  ];
+  const trains = useMemo(() => rails.map(mapRailToTrain), [rails]);
+
+  const stats = useMemo(() => ({
+    active: trains.length,
+    assigned: trains.reduce((s, t) => s + t.assigned, 0),
+    inProgress: trains.filter(t => t.status === 'loading').length,
+    delays: rails.filter((r: any) => r.status === 'Delayed').length,
+  }), [trains, rails]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -67,6 +75,70 @@ export default function RailCoordination() {
       default: return { bg: 'bg-slate-700', text: 'text-slate-400', border: 'border-slate-600' };
     }
   };
+
+  const handleScheduleTrain = async () => {
+    if (!newTrain.trainId || !newTrain.destination) {
+      toast.error('Train ID and destination are required');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      const today = new Date().toISOString().split('T')[0];
+      await railAPI.create({
+        trainNumber: newTrain.trainId,
+        destination: newTrain.destination || newTrain.route,
+        route: newTrain.route,
+        departureTime: newTrain.departure ? `${today}T${newTrain.departure}:00` : new Date().toISOString(),
+        estimatedArrival: newTrain.arrival ? `${today}T${newTrain.arrival}:00` : undefined,
+        capacity: parseInt(newTrain.capacity, 10) || 20,
+        status: 'Scheduled',
+      });
+      toast.success('Train scheduled', { description: `${newTrain.trainId} added to schedule` });
+      setShowScheduleModal(false);
+      setNewTrain({ trainId: '', arrival: '', departure: '', route: '', destination: '', capacity: '20', notes: '' });
+      await refreshAllData();
+    } catch (err: any) {
+      toast.error('Failed to schedule train', { description: err.response?.data?.message || err.message });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUpdateStatus = async (train: any, status: string) => {
+    try {
+      setSubmitting(true);
+      await railAPI.update(train._id, { status });
+      toast.success(`Train ${train.id} updated to ${status}`);
+      await refreshAllData();
+      const updated = rails.map(mapRailToTrain).find(t => t._id === train._id);
+      if (updated) setSelectedTrain(updated);
+    } catch (err: any) {
+      toast.error('Failed to update train', { description: err.response?.data?.message || err.message });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAddContainer = async (train: any, containerId: string) => {
+    try {
+      setSubmitting(true);
+      await railAPI.addContainer(train._id, { containerId, weight: 22000, type: '40HC' });
+      toast.success('Container assigned', { description: `${containerId} added to ${train.id}` });
+      await refreshAllData();
+    } catch (err: any) {
+      toast.error('Failed to assign container', { description: err.response?.data?.message || err.message });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (isLoading && !trains.length) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
+      </div>
+    );
+  }
 
   const getContainerStatusColor = (status: string) => {
     switch (status) {
@@ -99,22 +171,22 @@ export default function RailCoordination() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <Train className="w-5 h-5 text-blue-400 mb-2" />
-          <div className="text-2xl text-blue-400 mb-1">3</div>
+          <div className="text-2xl text-blue-400 mb-1">{stats.active}</div>
           <div className="text-slate-400 text-sm">Active Trains</div>
         </div>
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <Package className="w-5 h-5 text-emerald-400 mb-2" />
-          <div className="text-2xl text-emerald-400 mb-1">8</div>
+          <div className="text-2xl text-emerald-400 mb-1">{stats.assigned}</div>
           <div className="text-slate-400 text-sm">Containers Assigned</div>
         </div>
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <Clock className="w-5 h-5 text-yellow-400 mb-2" />
-          <div className="text-2xl text-yellow-400 mb-1">1</div>
+          <div className="text-2xl text-yellow-400 mb-1">{stats.inProgress}</div>
           <div className="text-slate-400 text-sm">In Progress</div>
         </div>
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <AlertTriangle className="w-5 h-5 text-orange-400 mb-2" />
-          <div className="text-2xl text-orange-400 mb-1">0</div>
+          <div className="text-2xl text-orange-400 mb-1">{stats.delays}</div>
           <div className="text-slate-400 text-sm">Delays</div>
         </div>
       </div>
@@ -295,36 +367,27 @@ export default function RailCoordination() {
               {/* Actions */}
               <div className="space-y-2 pt-4">
                 {selectedTrain.status === 'scheduled' && (
-                  <button 
-                    onClick={() => {
-                      toast.success('Container assignment started', {
-                        description: `Assigning containers to ${selectedTrain.id}`,
-                      });
-                    }}
-                    className="w-full px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/50 rounded-lg transition-colors"
+                  <button
+                    onClick={() => handleUpdateStatus(selectedTrain, 'Loading')}
+                    disabled={submitting}
+                    className="w-full px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/50 rounded-lg transition-colors disabled:opacity-50"
                   >
-                    Assign Containers
+                    Start Loading
                   </button>
                 )}
                 {selectedTrain.status === 'loading' && (
                   <>
-                    <button 
-                      onClick={() => {
-                        toast.success('Loading completed', {
-                          description: `${selectedTrain.id} ready for departure - ${selectedTrain.loaded}/${selectedTrain.capacity} containers loaded`,
-                        });
-                      }}
-                      className="w-full px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/50 rounded-lg transition-colors"
+                    <button
+                      onClick={() => handleUpdateStatus(selectedTrain, 'Departed')}
+                      disabled={submitting}
+                      className="w-full px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/50 rounded-lg transition-colors disabled:opacity-50"
                     >
                       Complete Loading
                     </button>
-                    <button 
-                      onClick={() => {
-                        toast.warning('Delay reported', {
-                          description: `${selectedTrain.id} departure time updated`,
-                        });
-                      }}
-                      className="w-full px-4 py-2 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border border-orange-500/50 rounded-lg transition-colors"
+                    <button
+                      onClick={() => handleUpdateStatus(selectedTrain, 'Delayed')}
+                      disabled={submitting}
+                      className="w-full px-4 py-2 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border border-orange-500/50 rounded-lg transition-colors disabled:opacity-50"
                     >
                       Report Delay
                     </button>
@@ -357,7 +420,7 @@ export default function RailCoordination() {
               <Package className="w-5 h-5 text-blue-400" />
               <span className="text-slate-300">From Yard</span>
             </div>
-            <div className="text-2xl text-blue-400 mb-1">142</div>
+            <div className="text-2xl text-blue-400 mb-1">{stats.assigned}</div>
             <div className="text-sm text-slate-400">Containers ready for rail</div>
           </div>
 
@@ -366,7 +429,7 @@ export default function RailCoordination() {
               <Train className="w-5 h-5 text-emerald-400" />
               <span className="text-slate-300">Rail Transit</span>
             </div>
-            <div className="text-2xl text-emerald-400 mb-1">8</div>
+            <div className="text-2xl text-emerald-400 mb-1">{stats.inProgress}</div>
             <div className="text-sm text-slate-400">Currently in transit</div>
           </div>
 
@@ -375,7 +438,7 @@ export default function RailCoordination() {
               <CheckCircle className="w-5 h-5 text-purple-400" />
               <span className="text-slate-300">Completed Today</span>
             </div>
-            <div className="text-2xl text-purple-400 mb-1">47</div>
+            <div className="text-2xl text-purple-400 mb-1">{trains.filter(t => t.status === 'departed').length}</div>
             <div className="text-sm text-slate-400">Successful transfers</div>
           </div>
         </div>
@@ -610,6 +673,15 @@ export default function RailCoordination() {
                   />
                 </div>
                 <div className="p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+                  <div className="text-slate-400 text-sm mb-1">Destination *</div>
+                  <input
+                    type="text"
+                    value={newTrain.destination}
+                    onChange={(e) => setNewTrain({ ...newTrain, destination: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+                <div className="p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
                   <div className="text-slate-400 text-sm mb-1">Route</div>
                   <input
                     type="text"
@@ -658,14 +730,11 @@ export default function RailCoordination() {
 
             <div className="p-6 border-t border-slate-800 flex justify-between">
               <button
-                onClick={() => {
-                  toast.success('Train scheduled', {
-                    description: 'New train added to schedule - Ready for container assignment',
-                  });
-                  setShowScheduleModal(false);
-                }}
-                className="px-6 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/50 rounded-lg transition-colors"
+                onClick={handleScheduleTrain}
+                disabled={submitting}
+                className="px-6 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/50 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
               >
+                {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                 Schedule Train
               </button>
               <button
@@ -678,6 +747,8 @@ export default function RailCoordination() {
           </div>
         </div>
       )}
+
+      <ModuleInfoPanel content={MODULE_INFO.rail} />
     </div>
   );
 }

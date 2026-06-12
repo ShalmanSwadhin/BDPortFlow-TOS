@@ -61,7 +61,7 @@ const vesselSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['scheduled', 'berthed', 'loading', 'unloading', 'departed'],
+    enum: ['scheduled', 'incoming', 'berthed', 'loading', 'unloading', 'delayed', 'departed'],
     default: 'scheduled'
   },
   cargoDetails: {

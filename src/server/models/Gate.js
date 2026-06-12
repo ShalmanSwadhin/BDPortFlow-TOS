@@ -8,7 +8,7 @@ const gateSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Open', 'Closed', 'Busy'],
+    enum: ['Open', 'Closed', 'Busy', 'Maintenance'],
     default: 'Open'
   },
   currentVehicle: {
@@ -31,6 +31,24 @@ const gateSchema = new mongoose.Schema({
     driverName: {
       type: String,
       required: true
+    },
+    driverContact: {
+      type: String,
+      trim: true
+    },
+    licensePlate: {
+      type: String,
+      trim: true,
+      uppercase: true
+    },
+    verificationNotes: {
+      type: String,
+      trim: true
+    },
+    approvalStatus: {
+      type: String,
+      enum: ['Pending', 'Approved', 'Rejected', 'Hold For Inspection'],
+      default: 'Pending'
     },
     containerId: {
       type: String,

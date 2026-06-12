@@ -1,18 +1,23 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Calendar, Clock, Truck, CheckCircle, AlertCircle, TrendingUp, X } from 'lucide-react';
+import { userAPI, auditAPI, permissionAPI, notificationAPI } from '../api/client';
+import { ROLE_LABELS, ROLE_VALUES, formatRelativeTime, SLOT_TIMES, MAX_BOOKINGS_PER_SLOT, formatDateKey } from '../utils/dataMappers';
+import ModuleInfoPanel, { MODULE_INFO } from './ModuleInfoPanel';
+import { Calendar, Clock, Truck, CheckCircle, AlertCircle, TrendingUp, X, Loader2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner@2.0.3';
 
 export default function TruckAppointment() {
-  const { bookings, addBooking, deleteBooking, updateBooking } = useApp();
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  });
+  const { bookings, addBooking, deleteBooking, updateBooking, refreshBookings, isLoading } = useApp();
+  const todayKey = formatDateKey(new Date());
+  const [selectedDate, setSelectedDate] = useState(todayKey);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [showAllBookings, setShowAllBookings] = useState(false);
   const [rescheduleBooking, setRescheduleBooking] = useState<any>(null);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduleSlot, setRescheduleSlot] = useState('');
+  const [rescheduling, setRescheduling] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     truck: '',
     container: '',
@@ -21,60 +26,70 @@ export default function TruckAppointment() {
     operationType: 'Container Pickup',
   });
 
-  const timeSlots = [
-    { time: '08:00', available: 3, booked: 7, status: 'high' },
-    { time: '08:30', available: 5, booked: 5, status: 'medium' },
-    { time: '09:00', available: 2, booked: 8, status: 'high' },
-    { time: '09:30', available: 4, booked: 6, status: 'medium' },
-    { time: '10:00', available: 7, booked: 3, status: 'low' },
-    { time: '10:30', available: 6, booked: 4, status: 'low' },
-    { time: '11:00', available: 8, booked: 2, status: 'low' },
-    { time: '11:30', available: 5, booked: 5, status: 'medium' },
-    { time: '12:00', available: 0, booked: 10, status: 'full' },
-    { time: '12:30', available: 3, booked: 7, status: 'high' },
-    { time: '13:00', available: 6, booked: 4, status: 'low' },
-    { time: '13:30', available: 7, booked: 3, status: 'low' },
-    { time: '14:00', available: 4, booked: 6, status: 'medium' },
-    { time: '14:30', available: 2, booked: 8, status: 'high' },
-    { time: '15:00', available: 5, booked: 5, status: 'medium' },
-    { time: '15:30', available: 8, booked: 2, status: 'low' },
-  ];
+  useEffect(() => {
+    refreshBookings(selectedDate);
+  }, [selectedDate, refreshBookings]);
 
-  // Calculate dynamic time slots based on actual bookings
+  const visibleBookings = bookings;
+
   const getDynamicTimeSlots = () => {
-    const bookingsForDate = bookings.filter(b => b.date === selectedDate);
-    const bookedSlots = bookingsForDate.map(b => b.slot);
+    const slotCounts: Record<string, number> = {};
+    visibleBookings.forEach(b => {
+      slotCounts[b.slot] = (slotCounts[b.slot] || 0) + 1;
+    });
 
-    return timeSlots.map(slot => {
-      const isBooked = bookedSlots.includes(slot.time);
-      if (isBooked) {
-        return {
-          ...slot,
-          available: Math.max(0, slot.available - 1),
-          booked: slot.booked + 1,
-          status: slot.available - 1 <= 0 ? 'full' : slot.status
-        };
-      }
-      return slot;
+    return SLOT_TIMES.map(time => {
+      const booked = slotCounts[time] || 0;
+      const available = Math.max(0, MAX_BOOKINGS_PER_SLOT - booked);
+      let status = 'low';
+      if (available === 0) status = 'full';
+      else if (available <= 2) status = 'high';
+      else if (available <= 5) status = 'medium';
+      return { time, available, booked, status };
     });
   };
 
   const dynamicTimeSlots = getDynamicTimeSlots();
 
-  const forecastData = [
-    { hour: '08:00', trucks: 23 },
-    { hour: '10:00', trucks: 18 },
-    { hour: '12:00', trucks: 31 },
-    { hour: '14:00', trucks: 27 },
-    { hour: '16:00', trucks: 22 },
-    { hour: '18:00', trucks: 15 },
-  ];
+  const openReschedule = (booking: any) => {
+    setRescheduleBooking(booking);
+    setRescheduleDate(booking.date);
+    setRescheduleSlot(booking.slot);
+  };
+
+  const handleConfirmReschedule = async () => {
+    if (!rescheduleBooking || !rescheduleDate || !rescheduleSlot) {
+      toast.error('Please select a new date and time slot');
+      return;
+    }
+    try {
+      setRescheduling(true);
+      await updateBooking(rescheduleBooking.id, {
+        date: rescheduleDate,
+        slot: rescheduleSlot,
+      }, selectedDate);
+      toast.success('Booking rescheduled!', {
+        description: `${rescheduleBooking.truck} moved to ${rescheduleDate} at ${rescheduleSlot}`,
+      });
+      setRescheduleBooking(null);
+      setShowAllBookings(false);
+    } catch (err: any) {
+      toast.error('Failed to reschedule booking', {
+        description: err.response?.data?.message || err.message,
+      });
+    } finally {
+      setRescheduling(false);
+    }
+  };
+
+  const forecastData = dynamicTimeSlots.map(s => ({ hour: s.time, trucks: s.booked }));
 
   const handleSubmitBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.truck || !formData.container || !selectedSlot) return;
 
     try {
+      setIsSubmitting(true);
       await addBooking({
         truck: formData.truck,
         container: formData.container,
@@ -99,14 +114,17 @@ export default function TruckAppointment() {
         operationType: 'Container Pickup',
       });
       setSelectedSlot(null);
-    } catch (error) {
+    } catch (error: any) {
       toast.error('Failed to create booking', {
-        description: 'Please try again',
+        description: error.response?.data?.message || error.message || 'Please try again',
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const recentBookings = bookings.filter(b => b.date === selectedDate).slice(0, 4);
+  const recentBookings = visibleBookings.slice(0, 4);
+  const isSelectedToday = selectedDate === todayKey;
 
   const getSlotColor = (status: string) => {
     switch (status) {
@@ -146,8 +164,10 @@ export default function TruckAppointment() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <Calendar className="w-5 h-5 text-emerald-400 mb-2" />
-          <div className="text-2xl text-emerald-400 mb-1">147</div>
-          <div className="text-slate-400 text-sm">Bookings Today</div>
+          <div className="text-2xl text-emerald-400 mb-1">{visibleBookings.length}</div>
+          <div className="text-slate-400 text-sm">
+            {isSelectedToday ? 'Bookings Today' : `Bookings on ${selectedDate}`}
+          </div>
         </div>
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <Clock className="w-5 h-5 text-blue-400 mb-2" />
@@ -185,10 +205,9 @@ export default function TruckAppointment() {
             {/* Quick Date Selection */}
             <div className="grid grid-cols-2 sm:flex gap-2">
               {['Today', 'Tomorrow', 'In 2 Days', 'In 3 Days'].map((label, idx) => {
-                const today = new Date();
-                const targetDate = new Date(today);
-                targetDate.setDate(today.getDate() + idx);
-                const dateString = targetDate.toISOString().split('T')[0];
+                const targetDate = new Date();
+                targetDate.setDate(targetDate.getDate() + idx);
+                const dateString = formatDateKey(targetDate);
 
                 return (
                   <button
@@ -381,11 +400,11 @@ export default function TruckAppointment() {
 
           {/* Recent Bookings */}
           <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-6">
-            <h3 className="text-lg mb-4">Recent Bookings ({recentBookings.length})</h3>
+            <h3 className="text-lg mb-4">Bookings for {selectedDate}</h3>
             {recentBookings.length === 0 ? (
               <div className="text-center py-8 text-slate-500">
                 <Truck className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                <p className="text-sm">No bookings for this date</p>
+                <p className="text-sm">No bookings found for selected date.</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -398,19 +417,25 @@ export default function TruckAppointment() {
                       <span className="text-sm text-slate-300">{booking.truck}</span>
                       <div className="flex items-center gap-2">
                         <span className={`text-xs px-2 py-1 rounded ${
-                          booking.status === 'confirmed'
+                          booking.status === 'Scheduled' || booking.status === 'confirmed'
                             ? 'bg-emerald-500/20 text-emerald-400'
                             : 'bg-yellow-500/20 text-yellow-400'
                         }`}>
                           {booking.status}
                         </span>
                         <button
-                          onClick={() => {
+                          onClick={async () => {
                             if (confirm('Cancel this booking?')) {
-                              deleteBooking(booking.id);
-                              toast.success('Booking cancelled', {
-                                description: `Booking #${booking.id} has been cancelled`,
-                              });
+                              try {
+                                await deleteBooking(booking.id, selectedDate);
+                                toast.success('Booking cancelled', {
+                                  description: `Booking for ${booking.truck} has been cancelled`,
+                                });
+                              } catch (err: any) {
+                                toast.error('Failed to cancel booking', {
+                                  description: err.message,
+                                });
+                              }
                             }
                           }}
                           className="p-1 hover:bg-red-500/20 text-red-400 rounded transition-colors"
@@ -439,16 +464,21 @@ export default function TruckAppointment() {
                 onClick={() => setShowAllBookings(true)}
                 className="w-full px-4 py-3 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/50 rounded-lg transition-colors text-left"
               >
-                View All Bookings ({bookings.length})
+                View Bookings for {selectedDate} ({visibleBookings.length})
               </button>
               <button
-                onClick={() => {
-                  if (bookings.length > 0) {
+                onClick={async () => {
+                  if (visibleBookings.length > 0) {
                     if (confirm('Cancel the most recent booking?')) {
-                      deleteBooking(bookings[0].id);
+                      try {
+                        await deleteBooking(visibleBookings[0].id, selectedDate);
+                        toast.success('Booking cancelled');
+                      } catch (err: any) {
+                        toast.error('Failed to cancel booking', { description: err.message });
+                      }
                     }
                   } else {
-                    alert('No bookings to cancel');
+                    alert('No bookings found for selected date.');
                   }
                 }}
                 className="w-full px-4 py-3 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 border border-purple-500/50 rounded-lg transition-colors text-left"
@@ -457,10 +487,10 @@ export default function TruckAppointment() {
               </button>
               <button
                 onClick={() => {
-                  if (bookings.length > 0) {
-                    setRescheduleBooking(bookings[0]);
+                  if (visibleBookings.length > 0) {
+                    openReschedule(visibleBookings[0]);
                   } else {
-                    alert('No bookings to reschedule');
+                    alert('No bookings found for selected date.');
                   }
                 }}
                 className="w-full px-4 py-3 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border border-orange-500/50 rounded-lg transition-colors text-left"
@@ -477,7 +507,7 @@ export default function TruckAppointment() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-blue-500/50 rounded-xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-6 border-b border-slate-800 flex items-center justify-between">
-              <h3 className="text-xl text-blue-400">All Bookings ({bookings.length})</h3>
+              <h3 className="text-xl text-blue-400">Bookings for {selectedDate} ({visibleBookings.length})</h3>
               <button
                 onClick={() => setShowAllBookings(false)}
                 className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
@@ -486,10 +516,10 @@ export default function TruckAppointment() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-6">
-              {bookings.length === 0 ? (
+              {visibleBookings.length === 0 ? (
                 <div className="text-center py-12 text-slate-500">
                   <Truck className="w-16 h-16 mx-auto mb-4 opacity-20" />
-                  <p>No bookings found</p>
+                  <p>No bookings found for selected date.</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -506,7 +536,7 @@ export default function TruckAppointment() {
                       </tr>
                     </thead>
                     <tbody>
-                      {bookings.map((booking) => (
+                      {visibleBookings.map((booking) => (
                         <tr key={booking.id} className="border-b border-slate-800 hover:bg-slate-800/30">
                           <td className="py-3 px-4 text-slate-200">{booking.truck}</td>
                           <td className="py-3 px-4 text-slate-200">{booking.container}</td>
@@ -515,7 +545,7 @@ export default function TruckAppointment() {
                           <td className="py-3 px-4 text-slate-400">{booking.slot}</td>
                           <td className="py-3 px-4">
                             <span className={`px-3 py-1 rounded-full text-xs ${
-                              booking.status === 'confirmed'
+                              booking.status === 'Scheduled' || booking.status === 'confirmed'
                                 ? 'bg-emerald-500/20 text-emerald-400'
                                 : 'bg-yellow-500/20 text-yellow-400'
                             }`}>
@@ -525,7 +555,7 @@ export default function TruckAppointment() {
                           <td className="py-3 px-4 text-right">
                             <button
                               onClick={() => {
-                                setRescheduleBooking(booking);
+                                openReschedule(booking);
                                 setShowAllBookings(false);
                               }}
                               className="px-3 py-1 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 rounded text-xs mr-2"
@@ -533,13 +563,19 @@ export default function TruckAppointment() {
                               Reschedule
                             </button>
                             <button
-                              onClick={() => {
+                              onClick={async () => {
                                 if (confirm('Cancel this booking?')) {
-                                  deleteBooking(booking.id);
-                                  setShowAllBookings(false);
-                                  toast.success('Booking cancelled', {
-                                    description: `Booking #${booking.id} has been cancelled`,
-                                  });
+                                  try {
+                                    await deleteBooking(booking.id, selectedDate);
+                                    setShowAllBookings(false);
+                                    toast.success('Booking cancelled', {
+                                      description: `Booking for ${booking.truck} has been cancelled`,
+                                    });
+                                  } catch (err: any) {
+                                    toast.error('Failed to cancel booking', {
+                                      description: err.message,
+                                    });
+                                  }
                                 }
                               }}
                               className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded text-xs"
@@ -585,16 +621,22 @@ export default function TruckAppointment() {
                 <label className="block text-slate-400 text-sm mb-2">New Date</label>
                 <input
                   type="date"
-                  defaultValue={rescheduleBooking.date}
+                  value={rescheduleDate}
+                  onChange={(e) => setRescheduleDate(e.target.value)}
+                  min={todayKey}
                   className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-orange-500"
                 />
               </div>
               <div>
                 <label className="block text-slate-400 text-sm mb-2">New Time Slot</label>
-                <select className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-orange-500">
-                  {timeSlots.filter(s => s.available > 0).map((slot) => (
-                    <option key={slot.time} value={slot.time}>
-                      {slot.time} ({slot.available} slots available)
+                <select
+                  value={rescheduleSlot}
+                  onChange={(e) => setRescheduleSlot(e.target.value)}
+                  className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-orange-500"
+                >
+                  {SLOT_TIMES.map((slot) => (
+                    <option key={slot} value={slot}>
+                      {slot}
                     </option>
                   ))}
                 </select>
@@ -608,20 +650,18 @@ export default function TruckAppointment() {
                 Cancel
               </button>
               <button
-                onClick={() => {
-                  toast.success('Booking rescheduled!', {
-                    description: `Updated schedule for ${rescheduleBooking.truck}`,
-                  });
-                  setRescheduleBooking(null);
-                }}
-                className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors"
+                onClick={handleConfirmReschedule}
+                disabled={rescheduling}
+                className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors disabled:opacity-50"
               >
-                Confirm Reschedule
+                {rescheduling ? 'Updating...' : 'Confirm Reschedule'}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      <ModuleInfoPanel content={MODULE_INFO.truck} />
     </div>
   );
 }

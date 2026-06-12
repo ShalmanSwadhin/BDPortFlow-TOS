@@ -55,7 +55,12 @@
     "vite": "6.3.5"
   },
   "scripts": {
+    "predev": "node scripts/ensure-dev-port.js",
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "test": "cd src/testing && python -m pytest",
+    "test:api": "cd src/testing && python -m pytest -m api",
+    "test:ui": "cd src/testing && python -m pytest -m ui --headless",
+    "test:smoke": "cd src/testing && python -m pytest -m smoke"
   }
 }

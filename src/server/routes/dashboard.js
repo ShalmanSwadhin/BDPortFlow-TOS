@@ -6,11 +6,12 @@ const {
   getChartData
 } = require('../controllers/dashboardController');
 const { protect } = require('../middleware/auth');
+const { checkPermission } = require('../middleware/permissions');
 
 router.use(protect);
 
-router.get('/stats', getDashboardStats);
-router.get('/activity', getRecentActivity);
-router.get('/charts', getChartData);
+router.get('/stats', checkPermission('Dashboard', 'view'), getDashboardStats);
+router.get('/activity', checkPermission('Dashboard', 'view'), getRecentActivity);
+router.get('/charts', checkPermission('Dashboard', 'view'), getChartData);
 
 module.exports = router;

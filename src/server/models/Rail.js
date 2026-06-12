@@ -35,7 +35,7 @@ const railSchema = new mongoose.Schema({
       required: true
     },
     weight: Number,
-    type: String,
+    type: { type: String },
     loadedAt: {
       type: Date,
       default: Date.now

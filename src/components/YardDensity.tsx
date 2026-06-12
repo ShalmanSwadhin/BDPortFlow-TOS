@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import { Grid3x3, Package, AlertTriangle, TrendingUp, Filter } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { yardAPI } from '../api/client';
+import ModuleInfoPanel, { MODULE_INFO } from './ModuleInfoPanel';
+import { Grid3x3, Package, AlertTriangle, TrendingUp, Filter, Loader2 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 
 export default function YardDensity() {
@@ -7,18 +9,91 @@ export default function YardDensity() {
   const [filterType, setFilterType] = useState('all');
   const [showBlockDetails, setShowBlockDetails] = useState(false);
   const [showOptimize, setShowOptimize] = useState(false);
+  const [blocks, setBlocks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [optimizing, setOptimizing] = useState(false);
 
-  // Yard blocks with density data
-  const blocks = [
-    { id: 'A', capacity: 120, occupied: 108, type: 'mixed', avgAge: 3, density: 90 },
-    { id: 'B', capacity: 100, occupied: 45, type: 'export', avgAge: 1, density: 45 },
-    { id: 'C', capacity: 80, occupied: 76, type: 'reefer', avgAge: 2, density: 95 },
-    { id: 'D', capacity: 150, occupied: 135, type: 'import', avgAge: 5, density: 90 },
-    { id: 'E', capacity: 100, occupied: 85, type: 'mixed', avgAge: 4, density: 85 },
-    { id: 'F', capacity: 120, occupied: 60, type: 'export', avgAge: 2, density: 50 },
-    { id: 'G', capacity: 90, occupied: 88, type: 'import', avgAge: 6, density: 98 },
-    { id: 'H', capacity: 110, occupied: 77, type: 'mixed', avgAge: 3, density: 70 },
-  ];
+  const loadBlocks = async () => {
+    try {
+      setLoading(true);
+      const res = await yardAPI.getBlocks();
+      if (res.data.success) {
+        const data = (res.data.data || []).map((b: any) => ({
+          id: b.id || b.blockId,
+          capacity: b.capacity,
+          occupied: b.occupied,
+          type: b.type,
+          avgAge: b.avgAge || 0,
+          density: b.density,
+          _id: b._id,
+        }));
+        setBlocks(data);
+      }
+    } catch (err: any) {
+      toast.error('Failed to load yard blocks', {
+        description: err.response?.data?.message || err.message,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBlocks();
+  }, []);
+
+  const filteredBlocks = useMemo(
+    () => (filterType === 'all' ? blocks : blocks.filter(b => b.type === filterType)),
+    [blocks, filterType]
+  );
+
+  const stats = useMemo(() => {
+    const totalContainers = blocks.reduce((s, b) => s + b.occupied, 0);
+    const avgDensity = blocks.length
+      ? Math.round(blocks.reduce((s, b) => s + b.density, 0) / blocks.length)
+      : 0;
+    const criticalBlocks = blocks.filter(b => b.density >= 90).length;
+    return { totalBlocks: blocks.length, totalContainers, avgDensity, criticalBlocks };
+  }, [blocks]);
+
+  const handleOptimize = async () => {
+    try {
+      setOptimizing(true);
+      const res = await yardAPI.optimize();
+      if (res.data.success) {
+        toast.success('Optimization complete!', {
+          description: res.data.message || 'Yard placement optimized',
+        });
+        if (res.data.data?.blocks) {
+          setBlocks(res.data.data.blocks.map((b: any) => ({
+            id: b.id || b.blockId,
+            capacity: b.capacity,
+            occupied: b.occupied,
+            type: b.type,
+            avgAge: b.avgAge || 0,
+            density: b.density,
+          })));
+        } else {
+          await loadBlocks();
+        }
+        setShowOptimize(false);
+      }
+    } catch (err: any) {
+      toast.error('Optimization failed', {
+        description: err.response?.data?.message || err.message,
+      });
+    } finally {
+      setOptimizing(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
+      </div>
+    );
+  }
 
   const getDensityColor = (density: number) => {
     if (density >= 90) return { bg: '#ef4444', text: 'text-red-400', level: 'Critical' };
@@ -63,22 +138,22 @@ export default function YardDensity() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <Grid3x3 className="w-5 h-5 text-blue-400 mb-2" />
-          <div className="text-2xl text-blue-400 mb-1">8</div>
+          <div className="text-2xl text-blue-400 mb-1">{stats.totalBlocks}</div>
           <div className="text-slate-400 text-sm">Total Blocks</div>
         </div>
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <Package className="w-5 h-5 text-emerald-400 mb-2" />
-          <div className="text-2xl text-emerald-400 mb-1">674</div>
+          <div className="text-2xl text-emerald-400 mb-1">{stats.totalContainers}</div>
           <div className="text-slate-400 text-sm">Total Containers</div>
         </div>
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <TrendingUp className="w-5 h-5 text-orange-400 mb-2" />
-          <div className="text-2xl text-orange-400 mb-1">77%</div>
+          <div className="text-2xl text-orange-400 mb-1">{stats.avgDensity}%</div>
           <div className="text-slate-400 text-sm">Avg Density</div>
         </div>
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <AlertTriangle className="w-5 h-5 text-red-400 mb-2" />
-          <div className="text-2xl text-red-400 mb-1">3</div>
+          <div className="text-2xl text-red-400 mb-1">{stats.criticalBlocks}</div>
           <div className="text-slate-400 text-sm">Critical Blocks</div>
         </div>
       </div>
@@ -97,7 +172,7 @@ export default function YardDensity() {
 
           {/* Heatmap Grid */}
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4 lg:gap-5">
-            {blocks.map((block) => {
+            {filteredBlocks.map((block) => {
               const densityColors = getDensityColor(block.density);
               const isSelected = selectedBlock?.id === block.id;
 
@@ -337,7 +412,7 @@ export default function YardDensity() {
               </tr>
             </thead>
             <tbody>
-              {blocks.map((block) => {
+              {filteredBlocks.map((block) => {
                 const densityColors = getDensityColor(block.density);
                 
                 return (
@@ -551,20 +626,19 @@ export default function YardDensity() {
                 Cancel
               </button>
               <button
-                onClick={() => {
-                  toast.success('Optimization plan created!', {
-                    description: `Block ${selectedBlock.id} placement optimized - Ready to execute`,
-                  });
-                  setShowOptimize(false);
-                }}
-                className="px-4 sm:px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors text-sm sm:text-base"
+                onClick={handleOptimize}
+                disabled={optimizing}
+                className="px-4 sm:px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors text-sm sm:text-base disabled:opacity-50 flex items-center gap-2"
               >
+                {optimizing && <Loader2 className="w-4 h-4 animate-spin" />}
                 Create Plan
               </button>
             </div>
           </div>
         </div>
       )}
+
+      <ModuleInfoPanel content={MODULE_INFO.yard} />
     </div>
   );
 }

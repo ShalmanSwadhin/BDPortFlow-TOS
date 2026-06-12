@@ -10,10 +10,10 @@ import {
   Train,
   CreditCard,
   DoorOpen,
-  Settings,
-  FileText,
   Shield,
 } from 'lucide-react';
+import { useApp } from '../context/AppContext';
+import { SCREEN_MODULE_MAP } from '../utils/dataMappers';
 
 interface SidebarProps {
   currentScreen: string;
@@ -23,26 +23,23 @@ interface SidebarProps {
   isMobile?: boolean;
 }
 
-export default function Sidebar({ currentScreen, onNavigate, userRole, isOpen, isMobile = false }: SidebarProps) {
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'emerald', roles: ['all'] },
-    { id: 'admin', label: 'Admin Panel', icon: Users, color: 'orange', roles: ['admin'] },
-    { id: 'berth', label: 'Berth Planner', icon: Ship, color: 'blue', roles: ['admin', 'berth', 'operator'] },
-    { id: 'reefer', label: 'Reefer Monitor', icon: Snowflake, color: 'cyan', roles: ['admin', 'operator'] },
-    { id: 'stacking', label: 'Container Stack', icon: Package, color: 'purple', roles: ['admin', 'operator'] },
-    { id: 'stowage', label: 'Ship Stowage', icon: Container, color: 'indigo', roles: ['admin', 'berth'] },
-    { id: 'gate', label: 'Gate Operations', icon: DoorOpen, color: 'green', roles: ['admin', 'operator'] },
-    { id: 'truck', label: 'Truck Booking', icon: Truck, color: 'yellow', roles: ['all'] },
-    { id: 'yard', label: 'Yard Density', icon: Grid3x3, color: 'red', roles: ['admin', 'operator'] },
-    { id: 'rail', label: 'Rail Coordination', icon: Train, color: 'pink', roles: ['admin', 'operator'] },
-    { id: 'customs', label: 'Custom Clearance', icon: Shield, color: 'amber', roles: ['customs'] },
-    { id: 'billing', label: 'Billing & Tariff', icon: CreditCard, color: 'violet', roles: ['admin', 'finance'] },
-  ];
+export default function Sidebar({ currentScreen, onNavigate, isOpen, isMobile = false }: SidebarProps) {
+  const { hasPermission } = useApp();
 
-  const hasAccess = (itemRoles: string[]) => {
-    if (itemRoles.includes('all')) return true;
-    return itemRoles.includes(userRole);
-  };
+  const menuItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'emerald' },
+    { id: 'admin', label: 'Admin Panel', icon: Users, color: 'orange' },
+    { id: 'berth', label: 'Berth Planner', icon: Ship, color: 'blue' },
+    { id: 'reefer', label: 'Reefer Monitor', icon: Snowflake, color: 'cyan' },
+    { id: 'stacking', label: 'Container Stack', icon: Package, color: 'purple' },
+    { id: 'stowage', label: 'Ship Stowage', icon: Container, color: 'indigo' },
+    { id: 'gate', label: 'Gate Operations', icon: DoorOpen, color: 'green' },
+    { id: 'truck', label: 'Truck Booking', icon: Truck, color: 'yellow' },
+    { id: 'yard', label: 'Yard Density', icon: Grid3x3, color: 'red' },
+    { id: 'rail', label: 'Rail Coordination', icon: Train, color: 'pink' },
+    { id: 'customs', label: 'Custom Clearance', icon: Shield, color: 'amber' },
+    { id: 'billing', label: 'Billing & Tariff', icon: CreditCard, color: 'violet' },
+  ];
 
   const colorClasses: { [key: string]: { bg: string; text: string; border: string } } = {
     emerald: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', border: 'border-emerald-500/50' },
@@ -66,7 +63,6 @@ export default function Sidebar({ currentScreen, onNavigate, userRole, isOpen, i
       }`}
     >
       <div className="h-full overflow-y-auto p-4 space-y-2 custom-scrollbar">
-        {/* Mobile Header */}
         {isMobile && (
           <div className="pb-3 mb-2 border-b border-slate-800">
             <h3 className="text-slate-300 text-sm">All Modules</h3>
@@ -75,7 +71,8 @@ export default function Sidebar({ currentScreen, onNavigate, userRole, isOpen, i
         )}
 
         {menuItems.map((item) => {
-          if (!hasAccess(item.roles)) return null;
+          const moduleName = SCREEN_MODULE_MAP[item.id];
+          if (moduleName && !hasPermission(moduleName, 'view')) return null;
 
           const Icon = item.icon;
           const colors = colorClasses[item.color];

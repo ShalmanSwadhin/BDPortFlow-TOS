@@ -1,31 +1,76 @@
-import { useState } from 'react';
-import { Ship, AlertTriangle, CheckCircle, TrendingDown, TrendingUp, Scale } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { useApp } from '../context/AppContext';
+import { stowageAPI } from '../api/client';
+import ModuleInfoPanel, { MODULE_INFO } from './ModuleInfoPanel';
+import { Ship, AlertTriangle, CheckCircle, TrendingUp, Scale, Loader2 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 
 export default function ShipStowage() {
+  const { vessels, refreshAllData } = useApp();
   const [selectedCell, setSelectedCell] = useState<any>(null);
-  const [balanceStatus, setBalanceStatus] = useState('stable');
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [pendingAssignments, setPendingAssignments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  // Ship bay grid - simplified representation
   const bays = 8;
   const rows = 6;
-  const tiers = 4;
 
-  // Mock container assignments (bay, row, tier)
-  const assignments = [
-    { bay: 1, row: 1, tier: 1, container: 'TCLU3456789', weight: 22.5, type: 'standard', destination: 'Singapore' },
-    { bay: 1, row: 1, tier: 2, container: 'YMMU8901234', weight: 24.8, type: 'reefer', destination: 'Singapore' },
-    { bay: 1, row: 2, tier: 1, container: 'MAEU5678901', weight: 20.2, type: 'standard', destination: 'Dubai' },
-    { bay: 2, row: 1, tier: 1, container: 'CSQU2345678', weight: 23.1, type: 'standard', destination: 'Shanghai' },
-    { bay: 2, row: 2, tier: 1, container: 'HLBU7890123', weight: 25.3, type: 'hazmat', destination: 'Singapore' },
-    { bay: 3, row: 1, tier: 1, container: 'TCKU4567890', weight: 21.7, type: 'standard', destination: 'Dubai' },
-    { bay: 3, row: 1, tier: 2, container: 'OOLU1234567', weight: 19.8, type: 'standard', destination: 'Dubai' },
-    { bay: 3, row: 2, tier: 1, container: 'MSCU8901234', weight: 24.2, type: 'standard', destination: 'Singapore' },
-    { bay: 4, row: 1, tier: 1, container: 'CMAU5678901', weight: 22.9, type: 'reefer', destination: 'Shanghai' },
-    { bay: 5, row: 1, tier: 1, container: 'APZU2345678', weight: 23.5, type: 'standard', destination: 'Dubai' },
-    { bay: 5, row: 2, tier: 1, container: 'SEGU7890123', weight: 21.1, type: 'standard', destination: 'Singapore' },
-    { bay: 6, row: 1, tier: 1, container: 'TEMU4567890', weight: 20.8, type: 'standard', destination: 'Shanghai' },
-  ];
+  const operationalVessels = useMemo(
+    () => vessels.filter(v => ['berthed', 'loading', 'unloading'].includes(v.status)),
+    [vessels]
+  );
+
+  const [selectedVesselId, setSelectedVesselId] = useState<string>('');
+
+  const activeVessel = useMemo(() => {
+    if (selectedVesselId) {
+      return vessels.find(v => v._id === selectedVesselId) || operationalVessels[0] || vessels[0];
+    }
+    return operationalVessels.find(v => v.status === 'berthed')
+      || operationalVessels[0]
+      || vessels[0];
+  }, [vessels, selectedVesselId, operationalVessels]);
+
+  const mapStowageRecord = (s: any) => ({
+    _id: s._id,
+    bay: s.bay,
+    row: s.row,
+    tier: s.tier,
+    container: s.containerId,
+    weight: s.weight > 100 ? s.weight / 1000 : s.weight,
+    type: s.type || 'standard',
+    destination: s.destination || 'Unknown',
+    vesselName: s.vesselName || activeVessel?.name,
+    status: s.status === 'placed' ? 'Loaded' : s.status === 'pending' ? 'Pending' : 'Removed',
+  });
+
+  useEffect(() => {
+    const loadStowage = async () => {
+      if (!activeVessel?._id) {
+        setAssignments([]);
+        setPendingAssignments([]);
+        setLoading(false);
+        return;
+      }
+      try {
+        setLoading(true);
+        const res = await stowageAPI.getAll({ vesselId: activeVessel._id });
+        if (res.data.success) {
+          const records = (res.data.data || []).map(mapStowageRecord);
+          setAssignments(records.filter((r: any) => r.status === 'Loaded'));
+          setPendingAssignments(records.filter((r: any) => r.status === 'Pending'));
+        }
+      } catch (err: any) {
+        toast.error('Failed to load stowage plan', {
+          description: err.response?.data?.message || err.message,
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadStowage();
+  }, [activeVessel?._id]);
 
   const getContainerAt = (bay: number, row: number, tier: number) => {
     return assignments.find(a => a.bay === bay && a.row === row && a.tier === tier);
@@ -68,6 +113,65 @@ export default function ShipStowage() {
 
   const balance = calculateBalance();
 
+  const handleRemoveContainer = async () => {
+    if (!selectedCell?._id) return;
+    try {
+      setActionLoading(true);
+      await stowageAPI.removeContainer(selectedCell._id);
+      toast.success('Container removed', { description: `${selectedCell.container} discharged from vessel` });
+      setSelectedCell(null);
+      const res = await stowageAPI.getAll({ vesselId: activeVessel?._id });
+      if (res.data.success) {
+        const records = (res.data.data || []).map(mapStowageRecord);
+        setAssignments(records.filter((r: any) => r.status === 'Loaded'));
+        setPendingAssignments(records.filter((r: any) => r.status === 'Pending'));
+      }
+      await refreshAllData();
+    } catch (err: any) {
+      toast.error('Failed to remove container', { description: err.response?.data?.message || err.message });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleMoveContainer = async () => {
+    if (!selectedCell || !activeVessel?._id) return;
+    const newBay = selectedCell.bay < bays ? selectedCell.bay + 1 : selectedCell.bay;
+    try {
+      setActionLoading(true);
+      await stowageAPI.moveContainer({
+        vesselId: activeVessel._id,
+        containerId: selectedCell.container,
+        bay: newBay,
+        row: selectedCell.row,
+        tier: selectedCell.tier,
+        weight: selectedCell.weight * 1000,
+        type: selectedCell.type,
+        destination: selectedCell.destination,
+      });
+      toast.success('Container move initiated', { description: `${selectedCell.container} relocated to bay ${newBay}` });
+      const res = await stowageAPI.getAll({ vesselId: activeVessel._id });
+      if (res.data.success) {
+        const records = (res.data.data || []).map(mapStowageRecord);
+        setAssignments(records.filter((r: any) => r.status === 'Loaded'));
+        setPendingAssignments(records.filter((r: any) => r.status === 'Pending'));
+      }
+      await refreshAllData();
+    } catch (err: any) {
+      toast.error('Failed to move container', { description: err.response?.data?.message || err.message });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -77,9 +181,18 @@ export default function ShipStowage() {
           <p className="text-slate-400 text-sm sm:text-base">Container placement and weight distribution</p>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <select
+            value={activeVessel?._id || ''}
+            onChange={(e) => setSelectedVesselId(e.target.value)}
+            className="px-4 py-2 bg-slate-900/50 border border-slate-800 rounded-lg text-slate-200 text-sm"
+          >
+            {(operationalVessels.length ? operationalVessels : vessels).map(v => (
+              <option key={v._id} value={v._id}>{v.name} ({v.status})</option>
+            ))}
+          </select>
           <div className="px-4 py-2 bg-slate-900/50 border border-slate-800 rounded-lg">
             <span className="text-slate-400 text-sm">Vessel: </span>
-            <span className="text-emerald-400">MV HARMONY</span>
+            <span className="text-emerald-400">{activeVessel?.name || 'No vessel'}</span>
           </div>
         </div>
       </div>
@@ -88,7 +201,7 @@ export default function ShipStowage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <Ship className="w-5 h-5 text-blue-400 mb-2" />
-          <div className="text-2xl text-blue-400 mb-1">245</div>
+          <div className="text-2xl text-blue-400 mb-1">{assignments.length}</div>
           <div className="text-slate-400 text-sm">Containers Loaded</div>
         </div>
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
@@ -112,7 +225,7 @@ export default function ShipStowage() {
         </div>
         <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-4">
           <TrendingUp className="w-5 h-5 text-cyan-400 mb-2" />
-          <div className="text-2xl text-cyan-400 mb-1">412</div>
+          <div className="text-2xl text-cyan-400 mb-1">{activeVessel?.containers || bays * rows}</div>
           <div className="text-slate-400 text-sm">Total Capacity</div>
         </div>
       </div>
@@ -284,6 +397,11 @@ export default function ShipStowage() {
                 </div>
 
                 <div className="p-4 bg-slate-800/50 rounded-lg">
+                  <div className="text-xs text-slate-400 mb-1">Status</div>
+                  <div className="text-lg text-emerald-400">{selectedCell.status || 'Loaded'}</div>
+                </div>
+
+                <div className="p-4 bg-slate-800/50 rounded-lg">
                   <div className="text-xs text-slate-400 mb-1">Destination</div>
                   <div
                     className="text-lg"
@@ -293,25 +411,29 @@ export default function ShipStowage() {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-slate-800/50 rounded-lg">
+                    <div className="text-xs text-slate-400 mb-1">Vessel</div>
+                    <div className="text-slate-200 text-sm">{selectedCell.vesselName || activeVessel?.name}</div>
+                  </div>
+                  <div className="p-3 bg-slate-800/50 rounded-lg">
+                    <div className="text-xs text-slate-400 mb-1">Status</div>
+                    <div className="text-emerald-400 text-sm">{selectedCell.status || 'Loaded'}</div>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                  <button 
-                    onClick={() => {
-                      toast.success('Container move initiated', {
-                        description: `${selectedCell?.id} scheduled for relocation`,
-                      });
-                    }}
-                    className="w-full px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/50 rounded-lg transition-colors"
+                  <button
+                    onClick={handleMoveContainer}
+                    disabled={actionLoading}
+                    className="w-full px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/50 rounded-lg transition-colors disabled:opacity-50"
                   >
                     Move Container
                   </button>
-                  <button 
-                    onClick={() => {
-                      toast.success('Container removed', {
-                        description: `${selectedCell?.id} discharged from vessel`,
-                      });
-                      setSelectedCell(null);
-                    }}
-                    className="w-full px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/50 rounded-lg transition-colors"
+                  <button
+                    onClick={handleRemoveContainer}
+                    disabled={actionLoading}
+                    className="w-full px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/50 rounded-lg transition-colors disabled:opacity-50"
                   >
                     Remove
                   </button>
@@ -424,6 +546,56 @@ export default function ShipStowage() {
           </div>
         </div>
       </div>
+
+      <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-6">
+        <h3 className="text-xl mb-4">Stowage Assignments — {activeVessel?.name}</h3>
+        {assignments.length + pendingAssignments.length === 0 ? (
+          <div className="text-center py-8 text-slate-500">
+            No stowage data for this vessel. Run the database seed script to load demo placements.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-slate-400 border-b border-slate-800">
+                  <th className="text-left py-2 px-3">Container ID</th>
+                  <th className="text-left py-2 px-3">Bay</th>
+                  <th className="text-left py-2 px-3">Row</th>
+                  <th className="text-left py-2 px-3">Tier</th>
+                  <th className="text-left py-2 px-3">Weight</th>
+                  <th className="text-left py-2 px-3">Destination</th>
+                  <th className="text-left py-2 px-3">Vessel</th>
+                  <th className="text-left py-2 px-3">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...assignments, ...pendingAssignments].map((a) => (
+                  <tr key={a._id} className="border-b border-slate-800/50 hover:bg-slate-800/30">
+                    <td className="py-2 px-3 text-slate-200">{a.container}</td>
+                    <td className="py-2 px-3 text-slate-400">{a.bay}</td>
+                    <td className="py-2 px-3 text-slate-400">{a.row}</td>
+                    <td className="py-2 px-3 text-slate-400">{a.tier}</td>
+                    <td className="py-2 px-3 text-slate-400">{a.weight}t</td>
+                    <td className="py-2 px-3 text-slate-400">{a.destination}</td>
+                    <td className="py-2 px-3 text-slate-400">{a.vesselName}</td>
+                    <td className="py-2 px-3">
+                      <span className={`px-2 py-0.5 rounded text-xs ${
+                        a.status === 'Loaded' ? 'bg-emerald-500/20 text-emerald-400' :
+                        a.status === 'Pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                        'bg-red-500/20 text-red-400'
+                      }`}>
+                        {a.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <ModuleInfoPanel content={MODULE_INFO.stowage} />
     </div>
   );
 }

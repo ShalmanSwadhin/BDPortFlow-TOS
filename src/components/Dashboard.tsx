@@ -19,6 +19,7 @@ export default function Dashboard({ userRole, onNavigate }: DashboardProps) {
       return <OperatorDashboard />;
     case 'berth':
       return <BerthDashboard />;
+    case 'truck':
     case 'driver':
       return <DriverDashboard onNavigate={onNavigate} />;
     case 'customs':

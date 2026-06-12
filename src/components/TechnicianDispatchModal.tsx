@@ -1,20 +1,47 @@
-import { X, Phone, MapPin, Wrench, Clock, CheckCircle } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { useState } from 'react';
+import { X, Phone, MapPin, Wrench, Clock, CheckCircle, Loader2 } from 'lucide-react';
+
+interface Technician {
+  id: number;
+  name: string;
+  phone: string;
+  location: string;
+  status: 'available' | 'busy' | 'offline';
+  specialty: string;
+  rating: number;
+  jobs: number;
+}
 
 interface TechnicianDispatchModalProps {
   container: any;
   onClose: () => void;
-  onDispatch: (techId: number) => void;
+  onDispatch: (technician: Technician) => Promise<void>;
 }
 
 export default function TechnicianDispatchModal({ container, onClose, onDispatch }: TechnicianDispatchModalProps) {
-  const technicians = [
+  const [dispatchingId, setDispatchingId] = useState<number | null>(null);
+
+  const technicians: Technician[] = [
     { id: 1, name: 'Rafiq Ahmed', phone: '+880 1712-345678', location: 'Block A', status: 'available', specialty: 'Refrigeration', rating: 4.8, jobs: 245 },
     { id: 2, name: 'Kamal Hossain', phone: '+880 1812-345679', location: 'Block C', status: 'available', specialty: 'Electrical', rating: 4.9, jobs: 312 },
     { id: 3, name: 'Jamal Uddin', phone: '+880 1912-345680', location: 'Block B', status: 'busy', specialty: 'Mechanical', rating: 4.7, jobs: 198 },
     { id: 4, name: 'Tarek Rahman', phone: '+880 1612-345681', location: 'Block D', status: 'available', specialty: 'Refrigeration', rating: 4.6, jobs: 167 },
     { id: 5, name: 'Farid Khan', phone: '+880 1512-345682', location: 'Office', status: 'offline', specialty: 'Electronics', rating: 4.5, jobs: 134 },
   ];
+
+  const handleDispatch = async (technician: Technician) => {
+    if (dispatchingId !== null) return;
+
+    setDispatchingId(technician.id);
+    try {
+      await onDispatch(technician);
+      onClose();
+    } catch {
+      // Parent handles error notification.
+    } finally {
+      setDispatchingId(null);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
@@ -26,7 +53,8 @@ export default function TechnicianDispatchModal({ container, onClose, onDispatch
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+            disabled={dispatchingId !== null}
+            className="p-2 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50"
           >
             <X className="w-5 h-5 text-slate-400" />
           </button>
@@ -91,17 +119,16 @@ export default function TechnicianDispatchModal({ container, onClose, onDispatch
                   </div>
                   {tech.status === 'available' && (
                     <button
-                      onClick={() => {
-                        onDispatch(tech.id);
-                        toast.success('Technician dispatched!', {
-                          description: `${tech.name} is on the way to ${container?.id}`,
-                        });
-                        onClose();
-                      }}
-                      className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors flex items-center gap-2"
+                      onClick={() => handleDispatch(tech)}
+                      disabled={dispatchingId !== null}
+                      className="px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-500/60 text-white rounded-lg transition-colors flex items-center gap-2"
                     >
-                      <Clock className="w-4 h-4" />
-                      Dispatch
+                      {dispatchingId === tech.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Clock className="w-4 h-4" />
+                      )}
+                      {dispatchingId === tech.id ? 'Dispatching...' : 'Dispatch'}
                     </button>
                   )}
                 </div>

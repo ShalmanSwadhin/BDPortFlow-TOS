@@ -1,0 +1,161 @@
+2026-06-06 02:49:12,088 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 02:49:17,253 - ERROR - bdportflow_tests - Test failed: test_open_truck_booking_from_dashboard
+2026-06-06 02:49:17,253 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_open_truck_booking_from_dashboard_20260606_024917.png
+2026-06-06 02:49:19,570 - INFO - bdportflow_tests - Browser closed
+2026-06-06 02:49:21,262 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 02:49:26,170 - ERROR - bdportflow_tests - Test failed: test_login_with_valid_admin_credentials
+2026-06-06 02:49:26,170 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_login_with_valid_admin_credentials_20260606_024926.png
+2026-06-06 02:49:28,435 - INFO - bdportflow_tests - Browser closed
+2026-06-06 02:49:30,236 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 02:49:35,535 - ERROR - bdportflow_tests - Test failed: test_login_fails_with_invalid_credentials
+2026-06-06 02:49:35,536 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_login_fails_with_invalid_credentials_20260606_024935.png
+2026-06-06 02:49:37,797 - INFO - bdportflow_tests - Browser closed
+2026-06-06 02:49:39,261 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 02:49:44,319 - ERROR - bdportflow_tests - Test failed: test_book_truck_slot
+2026-06-06 02:49:44,319 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_book_truck_slot_20260606_024944.png
+2026-06-06 02:49:46,571 - INFO - bdportflow_tests - Browser closed
+2026-06-06 02:49:48,012 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 02:49:53,220 - ERROR - bdportflow_tests - Test failed: test_create_and_delete_user
+2026-06-06 02:49:53,220 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_create_and_delete_user_20260606_024953.png
+2026-06-06 02:49:55,486 - INFO - bdportflow_tests - Browser closed
+2026-06-06 02:50:12,978 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 02:50:17,952 - ERROR - bdportflow_tests - Test failed: test_open_truck_booking_from_dashboard
+2026-06-06 02:50:17,952 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_open_truck_booking_from_dashboard_20260606_025017.png
+2026-06-06 02:50:20,212 - INFO - bdportflow_tests - Browser closed
+2026-06-06 02:50:22,263 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 02:50:27,468 - ERROR - bdportflow_tests - Test failed: test_login_with_valid_admin_credentials
+2026-06-06 02:50:27,468 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_login_with_valid_admin_credentials_20260606_025027.png
+2026-06-06 02:50:29,729 - INFO - bdportflow_tests - Browser closed
+2026-06-06 02:50:31,289 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 02:50:36,750 - ERROR - bdportflow_tests - Test failed: test_login_fails_with_invalid_credentials
+2026-06-06 02:50:36,751 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_login_fails_with_invalid_credentials_20260606_025036.png
+2026-06-06 02:50:39,011 - INFO - bdportflow_tests - Browser closed
+2026-06-06 02:50:40,453 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 02:50:45,750 - ERROR - bdportflow_tests - Test failed: test_book_truck_slot
+2026-06-06 02:50:45,750 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_book_truck_slot_20260606_025045.png
+2026-06-06 02:50:48,004 - INFO - bdportflow_tests - Browser closed
+2026-06-06 02:50:49,473 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 02:50:54,333 - ERROR - bdportflow_tests - Test failed: test_create_and_delete_user
+2026-06-06 02:50:54,333 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_create_and_delete_user_20260606_025054.png
+2026-06-06 02:50:56,620 - INFO - bdportflow_tests - Browser closed
+2026-06-06 02:51:31,731 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 02:51:48,843 - ERROR - bdportflow_tests - Test failed: test_open_truck_booking_from_dashboard
+2026-06-06 02:51:48,843 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_open_truck_booking_from_dashboard_20260606_025148.png
+2026-06-06 02:51:51,227 - INFO - bdportflow_tests - Browser closed
+2026-06-06 02:51:53,256 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 02:52:10,071 - ERROR - bdportflow_tests - Test failed: test_login_with_valid_admin_credentials
+2026-06-06 02:52:10,071 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_login_with_valid_admin_credentials_20260606_025209.png
+2026-06-06 02:52:12,454 - INFO - bdportflow_tests - Browser closed
+2026-06-06 02:52:14,512 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 02:52:26,351 - ERROR - bdportflow_tests - Test failed: test_login_fails_with_invalid_credentials
+2026-06-06 02:52:26,351 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_login_fails_with_invalid_credentials_20260606_025226.png
+2026-06-06 02:52:28,720 - INFO - bdportflow_tests - Browser closed
+2026-06-06 02:52:30,288 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 02:52:47,294 - ERROR - bdportflow_tests - Test failed: test_book_truck_slot
+2026-06-06 02:52:47,294 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_book_truck_slot_20260606_025247.png
+2026-06-06 02:52:49,671 - INFO - bdportflow_tests - Browser closed
+2026-06-06 02:52:51,113 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 02:53:08,325 - ERROR - bdportflow_tests - Test failed: test_create_and_delete_user
+2026-06-06 02:53:08,325 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_create_and_delete_user_20260606_025308.png
+2026-06-06 02:53:10,674 - INFO - bdportflow_tests - Browser closed
+2026-06-06 02:53:38,809 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 02:54:00,552 - ERROR - bdportflow_tests - Test failed: test_open_truck_booking_from_dashboard
+2026-06-06 02:54:00,553 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_open_truck_booking_from_dashboard_20260606_025400.png
+2026-06-06 09:20:38,584 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:21:09,308 - ERROR - bdportflow_tests - Test failed: test_login_with_valid_admin_credentials
+2026-06-06 09:21:09,308 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_login_with_valid_admin_credentials_20260606_092109.png
+2026-06-06 09:21:11,639 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:21:13,348 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:21:43,937 - ERROR - bdportflow_tests - Test failed: test_login_fails_with_invalid_credentials
+2026-06-06 09:21:43,937 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_login_fails_with_invalid_credentials_20260606_092143.png
+2026-06-06 09:21:46,260 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:21:47,999 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:22:18,687 - ERROR - bdportflow_tests - Test failed: test_book_truck_slot
+2026-06-06 09:22:18,687 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_book_truck_slot_20260606_092218.png
+2026-06-06 09:22:21,008 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:22:22,670 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:22:53,519 - ERROR - bdportflow_tests - Test failed: test_create_and_delete_user
+2026-06-06 09:22:53,519 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_create_and_delete_user_20260606_092253.png
+2026-06-06 09:22:55,854 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:24:42,720 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:24:48,553 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:24:50,756 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:24:56,410 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:24:58,755 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:25:18,194 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:25:20,310 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:25:33,879 - ERROR - bdportflow_tests - Test failed: test_book_truck_slot
+2026-06-06 09:25:33,879 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_book_truck_slot_20260606_092533.png
+2026-06-06 09:25:36,214 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:25:37,772 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:25:47,160 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:26:13,198 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:26:19,272 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:26:21,082 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:26:26,693 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:26:28,342 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:26:47,677 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:26:49,345 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:27:11,459 - ERROR - bdportflow_tests - Test failed: test_book_truck_slot
+2026-06-06 09:27:11,460 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_book_truck_slot_20260606_092711.png
+2026-06-06 09:27:13,885 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:27:16,121 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:27:26,528 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:27:56,206 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:28:02,361 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:28:04,561 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:28:10,112 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:28:11,773 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:28:31,318 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:28:32,964 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:28:58,044 - ERROR - bdportflow_tests - Test failed: test_book_truck_slot
+2026-06-06 09:28:58,045 - ERROR - bdportflow_tests - Screenshot: E:\Software Engineering\BDPortFlow Terminal Operating System UI\src\testing\utilities\..\screenshots\test_book_truck_slot_20260606_092857.png
+2026-06-06 09:29:00,523 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:29:02,445 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:29:12,925 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:29:32,849 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:29:38,741 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:29:40,343 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:29:45,955 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:29:47,579 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:30:07,358 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:30:08,986 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:30:16,809 - INFO - bdportflow_tests - Browser closed
+2026-06-06 09:30:18,455 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 09:30:28,355 - INFO - bdportflow_tests - Browser closed
+2026-06-06 13:04:24,779 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 13:04:31,487 - INFO - bdportflow_tests - Browser closed
+2026-06-06 13:04:33,793 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 13:04:39,730 - INFO - bdportflow_tests - Browser closed
+2026-06-06 13:04:42,165 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 13:05:01,514 - INFO - bdportflow_tests - Browser closed
+2026-06-06 13:05:03,961 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 13:05:12,314 - INFO - bdportflow_tests - Browser closed
+2026-06-06 13:05:13,996 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 13:05:24,878 - INFO - bdportflow_tests - Browser closed
+2026-06-06 13:06:20,462 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 13:06:25,640 - INFO - bdportflow_tests - Browser closed
+2026-06-06 14:19:56,396 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 14:20:02,573 - INFO - bdportflow_tests - Browser closed
+2026-06-06 14:20:04,963 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 14:20:10,730 - INFO - bdportflow_tests - Browser closed
+2026-06-06 14:20:13,030 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 14:20:32,659 - INFO - bdportflow_tests - Browser closed
+2026-06-06 14:20:34,466 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 14:20:42,512 - INFO - bdportflow_tests - Browser closed
+2026-06-06 14:20:44,219 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-06 14:20:55,521 - INFO - bdportflow_tests - Browser closed
+2026-06-11 14:29:31,693 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-11 14:29:33,530 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-11 14:29:40,434 - INFO - bdportflow_tests - Browser closed
+2026-06-11 14:29:40,864 - INFO - bdportflow_tests - Browser closed
+2026-06-11 14:33:27,567 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-11 14:33:35,562 - INFO - bdportflow_tests - Browser closed
+2026-06-11 14:33:37,627 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-11 14:33:43,545 - INFO - bdportflow_tests - Browser closed
+2026-06-11 14:33:45,112 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-11 14:34:04,765 - INFO - bdportflow_tests - Browser closed
+2026-06-11 14:34:07,086 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-11 14:34:15,147 - INFO - bdportflow_tests - Browser closed
+2026-06-11 14:34:17,346 - INFO - bdportflow_tests - Browser launched: chrome
+2026-06-11 14:34:27,589 - INFO - bdportflow_tests - Browser closed

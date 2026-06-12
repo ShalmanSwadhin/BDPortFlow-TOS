@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import Sidebar from './Sidebar';
 import Dashboard from './Dashboard';
@@ -24,7 +24,8 @@ import MobileTasks from './mobile/MobileTasks';
 import MobileAlerts from './mobile/MobileAlerts';
 import MobileProfile from './mobile/MobileProfile';
 import MobileBottomNav from './mobile/MobileBottomNav';
-import { Menu, Bell, User, LogOut, Search, Keyboard, Ship, ArrowLeft } from 'lucide-react';
+import { Menu, Bell, User, LogOut, Search, Keyboard, Ship, ArrowLeft, ShieldAlert } from 'lucide-react';
+import { SCREEN_MODULE_MAP } from '../utils/dataMappers';
 
 interface MainLayoutProps {
   userRole: string;
@@ -32,7 +33,7 @@ interface MainLayoutProps {
 }
 
 export default function MainLayout({ userRole, onLogout }: MainLayoutProps) {
-  const { notifications, logout: contextLogout, user } = useApp();
+  const { notifications, logout: contextLogout, user, hasPermission } = useApp();
   const [currentScreen, setCurrentScreen] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
@@ -45,6 +46,7 @@ export default function MainLayout({ userRole, onLogout }: MainLayoutProps) {
   const [showProfile, setShowProfile] = useState(false);
   const [mobileShowDesktopScreen, setMobileShowDesktopScreen] = useState(false);
   const [adminSection, setAdminSection] = useState<'users' | 'settings' | 'reports'>('users');
+  const notificationBtnRef = useRef<HTMLButtonElement>(null);
   
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -118,6 +120,19 @@ export default function MainLayout({ userRole, onLogout }: MainLayoutProps) {
   }, [isMobile]);
 
   const renderDesktopScreen = () => {
+    const moduleName = SCREEN_MODULE_MAP[currentScreen];
+    if (moduleName && !hasPermission(moduleName, 'view')) {
+      return (
+        <div className="flex flex-col items-center justify-center h-96 text-center">
+          <ShieldAlert className="w-16 h-16 text-red-400 mb-4 opacity-50" />
+          <h2 className="text-xl text-slate-200 mb-2">Access Denied</h2>
+          <p className="text-slate-400 text-sm max-w-md">
+            You do not have permission to access {moduleName}. Contact your administrator if you need access.
+          </p>
+        </div>
+      );
+    }
+
     switch (currentScreen) {
       case 'dashboard':
         return <Dashboard userRole={userRole} onNavigate={(screen) => {
@@ -407,6 +422,7 @@ export default function MainLayout({ userRole, onLogout }: MainLayoutProps) {
             {/* Notifications */}
             <div className="relative">
               <button
+                ref={notificationBtnRef}
                 onClick={() => setShowNotifications(!showNotifications)}
                 className="p-2 hover:bg-slate-800 rounded-lg transition-colors relative"
                 title="Notifications"
@@ -416,6 +432,12 @@ export default function MainLayout({ userRole, onLogout }: MainLayoutProps) {
                   <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
                 )}
               </button>
+              {showNotifications && (
+                <NotificationPanel
+                  anchorRef={notificationBtnRef}
+                  onClose={() => setShowNotifications(false)}
+                />
+              )}
             </div>
 
             {/* User Menu */}
@@ -447,7 +469,6 @@ export default function MainLayout({ userRole, onLogout }: MainLayoutProps) {
           onNavigate={(screen) => {
             setCurrentScreen(screen);
           }}
-          userRole={userRole}
           isOpen={sidebarOpen}
           isMobile={false}
         />
@@ -464,9 +485,6 @@ export default function MainLayout({ userRole, onLogout }: MainLayoutProps) {
 
       {/* Global Search */}
       {showSearch && <GlobalSearch onClose={() => setShowSearch(false)} />}
-
-      {/* Notifications Panel */}
-      {showNotifications && <NotificationPanel onClose={() => setShowNotifications(false)} />}
 
       {/* Keyboard Shortcuts */}
       {showShortcuts && <KeyboardShortcuts onClose={() => setShowShortcuts(false)} />}

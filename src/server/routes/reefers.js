@@ -6,21 +6,24 @@ const {
   createReefer,
   updateReefer,
   deleteReefer,
-  addAlert
+  addAlert,
+  adjustTemperature
 } = require('../controllers/reeferController');
-const { protect, authorize } = require('../middleware/auth');
+const { protect } = require('../middleware/auth');
+const { checkPermission } = require('../middleware/permissions');
 
 router.use(protect);
 
 router.route('/')
-  .get(getReefers)
-  .post(authorize('admin', 'operator'), createReefer);
+  .get(checkPermission('Reefer Monitor', 'view'), getReefers)
+  .post(checkPermission('Reefer Monitor', 'create'), createReefer);
 
 router.route('/:id')
-  .get(getReefer)
-  .put(authorize('admin', 'operator'), updateReefer)
-  .delete(authorize('admin'), deleteReefer);
+  .get(checkPermission('Reefer Monitor', 'view'), getReefer)
+  .put(checkPermission('Reefer Monitor', 'edit'), updateReefer)
+  .delete(checkPermission('Reefer Monitor', 'delete'), deleteReefer);
 
-router.post('/:id/alert', authorize('admin', 'operator'), addAlert);
+router.post('/:id/alert', checkPermission('Reefer Monitor', 'edit'), addAlert);
+router.patch('/:id/temperature', checkPermission('Reefer Monitor', 'edit'), adjustTemperature);
 
 module.exports = router;

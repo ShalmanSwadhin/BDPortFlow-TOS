@@ -1,25 +1,31 @@
-import { useState } from 'react';
-import { AppProvider } from './context/AppContext';
+import { useState, useEffect } from 'react';
+import { AppProvider, useApp } from './context/AppContext';
 import Login from './components/Login';
 import ForgotPassword from './components/ForgotPassword';
 import PublicDashboard from './components/PublicDashboard';
 import MainLayout from './components/MainLayout';
 import { Toaster } from "sonner";
 
-export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+function AppContent() {
+  const { isAuthenticated, user, logout: contextLogout } = useApp();
   const [userRole, setUserRole] = useState<string>('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [showPublicDashboard, setShowPublicDashboard] = useState(true);
 
+  useEffect(() => {
+    if (isAuthenticated && user?.role) {
+      setUserRole(user.role);
+      setShowPublicDashboard(false);
+    }
+  }, [isAuthenticated, user]);
+
   const handleLogin = (role: string) => {
     setUserRole(role);
-    setIsAuthenticated(true);
     setShowPublicDashboard(false);
   };
 
   const handleLogout = () => {
-    setIsAuthenticated(false);
+    contextLogout();
     setUserRole('');
     setShowPublicDashboard(true);
   };
@@ -44,10 +50,32 @@ export default function App() {
     setShowForgotPassword(false);
   };
 
+  if (isAuthenticated && userRole) {
+    return <MainLayout userRole={userRole} onLogout={handleLogout} />;
+  }
+
+  if (showPublicDashboard) {
+    return <PublicDashboard onNavigateToLogin={handleNavigateToLogin} />;
+  }
+
+  if (showForgotPassword) {
+    return <ForgotPassword onBackToLogin={handleBackToLogin} />;
+  }
+
+  return (
+    <Login
+      onLogin={handleLogin}
+      onForgotPassword={handleForgotPassword}
+      onBackToPublic={handleBackToPublic}
+    />
+  );
+}
+
+export default function App() {
   return (
     <AppProvider>
-      <Toaster 
-        position="top-center" 
+      <Toaster
+        position="top-center"
         theme="dark"
         toastOptions={{
           style: {
@@ -57,21 +85,7 @@ export default function App() {
           },
         }}
       />
-      {!isAuthenticated ? (
-        showPublicDashboard ? (
-          <PublicDashboard onNavigateToLogin={handleNavigateToLogin} />
-        ) : showForgotPassword ? (
-          <ForgotPassword onBackToLogin={handleBackToLogin} />
-        ) : (
-          <Login 
-            onLogin={handleLogin} 
-            onForgotPassword={handleForgotPassword}
-            onBackToPublic={handleBackToPublic}
-          />
-        )
-      ) : (
-        <MainLayout userRole={userRole} onLogout={handleLogout} />
-      )}
+      <AppContent />
     </AppProvider>
   );
 }

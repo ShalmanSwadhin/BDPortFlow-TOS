@@ -1,25 +1,68 @@
 const Truck = require('../models/Truck');
+const { createAuditLog } = require('../utils/auditLogger');
+const {
+  parseDateParam,
+  normalizeAppointmentDate,
+  formatDateKey,
+  todayDateKey,
+} = require('../utils/dateUtils');
+
+async function findDuplicateBooking({ truckNumber, appointmentDate, appointmentTime, excludeId = null }) {
+  const dateKey = formatDateKey(appointmentDate);
+  const range = parseDateParam(dateKey);
+  if (!range) return null;
+
+  const query = {
+    truckNumber: truckNumber.toUpperCase().trim(),
+    appointmentDate: { $gte: range.start, $lt: range.end },
+    appointmentTime: appointmentTime.trim(),
+    status: { $nin: ['Cancelled'] },
+  };
+
+  if (excludeId) {
+    query._id = { $ne: excludeId };
+  }
+
+  return Truck.findOne(query);
+}
 
 exports.getTrucks = async (req, res) => {
   try {
-    const { status, appointmentDate } = req.query;
-    let query = {};
-    
-    // If user is a truck driver, only show their bookings
+    const { status, includeCancelled } = req.query;
+    const dateParam = req.query.date || req.query.appointmentDate || todayDateKey();
+    const range = parseDateParam(dateParam);
+
+    if (!range) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid date. Use YYYY-MM-DD format.',
+      });
+    }
+
+    const query = {
+      appointmentDate: { $gte: range.start, $lt: range.end },
+    };
+
     if (req.user.role === 'truck') {
       query.user = req.user._id;
     }
-    
-    if (status) query.status = status;
-    if (appointmentDate) {
-      const start = new Date(appointmentDate);
-      const end = new Date(appointmentDate);
-      end.setDate(end.getDate() + 1);
-      query.appointmentDate = { $gte: start, $lt: end };
+
+    if (status) {
+      query.status = status;
+    } else if (includeCancelled !== 'true') {
+      query.status = { $ne: 'Cancelled' };
     }
 
-    const trucks = await Truck.find(query).sort('-appointmentDate').populate('user', 'name email');
-    res.json({ success: true, count: trucks.length, data: trucks });
+    const trucks = await Truck.find(query)
+      .sort('appointmentTime')
+      .populate('user', 'name email');
+
+    res.json({
+      success: true,
+      count: trucks.length,
+      date: range.dateKey,
+      data: trucks,
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -39,28 +82,34 @@ exports.getTruck = async (req, res) => {
 
 exports.createTruck = async (req, res) => {
   try {
-    // Validate required fields
     const { truckNumber, driverName, driverContact, containerId, appointmentDate, appointmentTime, purpose } = req.body;
     if (!truckNumber || !driverName || !driverContact || !containerId || !appointmentDate || !appointmentTime || !purpose) {
-      console.error('Missing required fields:', { truckNumber, driverName, driverContact, containerId, appointmentDate, appointmentTime, purpose });
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Missing required fields: truckNumber, driverName, driverContact, containerId, appointmentDate, appointmentTime, purpose' 
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: truckNumber, driverName, driverContact, containerId, appointmentDate, appointmentTime, purpose',
       });
     }
 
-    // Ensure appointmentDate is a valid Date
-    let appointmentDateObj = appointmentDate;
-    if (typeof appointmentDate === 'string') {
-      appointmentDateObj = new Date(appointmentDate);
+    let appointmentDateObj;
+    try {
+      appointmentDateObj = normalizeAppointmentDate(appointmentDate);
+    } catch {
+      return res.status(400).json({ success: false, message: 'Invalid appointmentDate. Use YYYY-MM-DD format.' });
     }
 
-    // Validate user is authenticated
     if (!req.user || !req.user._id) {
-      console.error('User not authenticated:', req.user);
-      return res.status(401).json({ 
-        success: false, 
-        message: 'User not authenticated' 
+      return res.status(401).json({ success: false, message: 'User not authenticated' });
+    }
+
+    const duplicate = await findDuplicateBooking({
+      truckNumber,
+      appointmentDate: appointmentDateObj,
+      appointmentTime,
+    });
+    if (duplicate) {
+      return res.status(400).json({
+        success: false,
+        message: 'A booking already exists for this truck, date, and time slot',
       });
     }
 
@@ -71,27 +120,42 @@ exports.createTruck = async (req, res) => {
       containerId: containerId.toUpperCase().trim(),
       appointmentDate: appointmentDateObj,
       appointmentTime: appointmentTime.trim(),
-      purpose: purpose,
+      purpose,
       status: req.body.status || 'Scheduled',
-      user: req.user._id
+      user: req.user._id,
     };
 
-    console.log('Creating truck with data:', truckData);
     const truck = await Truck.create(truckData);
-    console.log('Truck created successfully:', truck._id);
+
+    await createAuditLog({
+      user: req.user,
+      moduleName: 'Truck Booking',
+      actionType: 'create',
+      recordId: truck._id,
+      updatedValues: truck.toObject(),
+      description: `Booking created for truck ${truck.truckNumber} on ${formatDateKey(truck.appointmentDate)} ${appointmentTime}`,
+    });
+
+    const { sendNotification } = require('../utils/notificationService');
+    await sendNotification({
+      module: 'Truck Booking',
+      action: 'Booking Created',
+      message: `Truck booking confirmed: ${truck.truckNumber} for ${truck.containerId} on ${formatDateKey(truck.appointmentDate)} ${appointmentTime}`,
+      recordId: truck._id,
+      createdBy: req.user._id,
+      targetUserId: truck.user,
+      dedupeKey: `truck:create:${truck._id}`,
+    });
+
     res.status(201).json({ success: true, message: 'Truck appointment booked successfully', data: truck });
   } catch (error) {
-    console.error('Error creating truck:', {
-      message: error.message,
-      name: error.name,
-      code: error.code,
-      errors: error.errors,
-      stack: error.stack
-    });
-    res.status(500).json({ 
-      success: false, 
+    console.error('Error creating truck:', error.message);
+    res.status(500).json({
+      success: false,
       message: error.message || 'Failed to create truck appointment',
-      details: error.errors ? Object.keys(error.errors).map(key => `${key}: ${error.errors[key].message}`) : undefined
+      details: error.errors
+        ? Object.keys(error.errors).map((key) => `${key}: ${error.errors[key].message}`)
+        : undefined,
     });
   }
 };
@@ -103,14 +167,75 @@ exports.updateTruck = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Truck booking not found' });
     }
 
-    // Truck drivers can only update their own bookings
     if (req.user.role === 'truck' && truck.user.toString() !== req.user._id.toString()) {
       return res.status(403).json({ success: false, message: 'Not authorized to update this booking' });
     }
 
-    truck = await Truck.findByIdAndUpdate(req.params.id, req.body, {
+    const previousValues = truck.toObject();
+    const updateData = { ...req.body };
+
+    if (updateData.appointmentDate) {
+      try {
+        updateData.appointmentDate = normalizeAppointmentDate(updateData.appointmentDate);
+      } catch {
+        return res.status(400).json({ success: false, message: 'Invalid appointmentDate. Use YYYY-MM-DD format.' });
+      }
+    }
+    if (updateData.appointmentTime) {
+      updateData.appointmentTime = updateData.appointmentTime.trim();
+    }
+    if (updateData.truckNumber) {
+      updateData.truckNumber = updateData.truckNumber.toUpperCase().trim();
+    }
+
+    const truckNumber = updateData.truckNumber || truck.truckNumber;
+    const appointmentDate = updateData.appointmentDate || truck.appointmentDate;
+    const appointmentTime = updateData.appointmentTime || truck.appointmentTime;
+
+    if (updateData.appointmentDate || updateData.appointmentTime) {
+      const duplicate = await findDuplicateBooking({
+        truckNumber,
+        appointmentDate,
+        appointmentTime,
+        excludeId: truck._id,
+      });
+      if (duplicate) {
+        return res.status(400).json({
+          success: false,
+          message: 'A booking already exists for this truck, date, and time slot',
+        });
+      }
+    }
+
+    truck = await Truck.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
-      runValidators: true
+      runValidators: true,
+    });
+
+    const isReschedule = updateData.appointmentDate || updateData.appointmentTime;
+    await createAuditLog({
+      user: req.user,
+      moduleName: 'Truck Booking',
+      actionType: isReschedule ? 'update' : 'update',
+      recordId: truck._id,
+      previousValues,
+      updatedValues: truck.toObject(),
+      description: isReschedule
+        ? `Booking rescheduled for truck ${truck.truckNumber} to ${formatDateKey(truck.appointmentDate)} ${truck.appointmentTime}`
+        : `Booking updated for truck ${truck.truckNumber}`,
+    });
+
+    const { sendNotification } = require('../utils/notificationService');
+    await sendNotification({
+      module: 'Truck Booking',
+      action: 'Booking Updated',
+      message: isReschedule
+        ? `Truck booking rescheduled: ${truck.truckNumber} moved to ${formatDateKey(truck.appointmentDate)} ${truck.appointmentTime}`
+        : `Truck booking updated: ${truck.truckNumber} — status ${truck.status}`,
+      recordId: truck._id,
+      createdBy: req.user._id,
+      targetUserId: truck.user,
+      dedupeKey: `truck:update:${truck._id}:${Date.now()}`,
     });
 
     res.json({ success: true, message: 'Truck appointment updated successfully', data: truck });
@@ -126,12 +251,35 @@ exports.deleteTruck = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Truck booking not found' });
     }
 
-    // Truck drivers can only delete their own bookings
     if (req.user.role === 'truck' && truck.user.toString() !== req.user._id.toString()) {
       return res.status(403).json({ success: false, message: 'Not authorized to delete this booking' });
     }
 
-    await truck.deleteOne();
+    const previousValues = truck.toObject();
+    truck.status = 'Cancelled';
+    await truck.save();
+
+    await createAuditLog({
+      user: req.user,
+      moduleName: 'Truck Booking',
+      actionType: 'cancel',
+      recordId: truck._id,
+      previousValues,
+      updatedValues: { status: 'Cancelled' },
+      description: `Booking cancelled for truck ${truck.truckNumber}`,
+    });
+
+    const { sendNotification } = require('../utils/notificationService');
+    await sendNotification({
+      module: 'Truck Booking',
+      action: 'Booking Cancelled',
+      message: `Truck booking cancelled: ${truck.truckNumber} for ${truck.containerId}`,
+      recordId: truck._id,
+      createdBy: req.user._id,
+      targetUserId: truck.user,
+      dedupeKey: `truck:cancel:${truck._id}`,
+    });
+
     res.json({ success: true, message: 'Truck appointment cancelled successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

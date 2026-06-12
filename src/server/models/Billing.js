@@ -3,7 +3,6 @@ const mongoose = require('mongoose');
 const billingSchema = new mongoose.Schema({
   invoiceNumber: {
     type: String,
-    required: true,
     unique: true,
     trim: true
   },
@@ -11,6 +10,23 @@ const billingSchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true
+  },
+  companyName: {
+    type: String,
+    trim: true
+  },
+  serviceType: {
+    type: String,
+    enum: ['Container Storage', 'Handling', 'Reefer', 'Berth', 'Rail Service', 'Demurrage', 'Other'],
+    default: 'Handling'
+  },
+  paymentAmount: {
+    type: Number,
+    default: 0
+  },
+  dueAmount: {
+    type: Number,
+    default: 0
   },
   customerEmail: {
     type: String,
@@ -108,16 +124,27 @@ const billingSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Auto-generate invoice number
-billingSchema.pre('save', async function(next) {
-  if (!this.invoiceNumber) {
-    const count = await mongoose.model('Billing').countDocuments();
-    this.invoiceNumber = `INV-${new Date().getFullYear()}-${String(count + 1).padStart(5, '0')}`;
+async function generateInvoiceNumber() {
+  const count = await mongoose.model('Billing').countDocuments();
+  return `INV-${new Date().getFullYear()}-${String(count + 1).padStart(5, '0')}`;
+}
+
+billingSchema.pre('validate', async function(next) {
+  try {
+    if (!this.invoiceNumber) {
+      this.invoiceNumber = await generateInvoiceNumber();
+    }
+    if (!this.dueDate) {
+      const issue = this.issueDate ? new Date(this.issueDate) : new Date();
+      issue.setDate(issue.getDate() + 30);
+      this.dueDate = issue;
+    }
+    next();
+  } catch (err) {
+    next(err);
   }
-  next();
 });
 
-// Indexes
 billingSchema.index({ status: 1 });
 billingSchema.index({ customerEmail: 1 });
 

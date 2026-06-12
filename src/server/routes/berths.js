@@ -6,13 +6,14 @@ const {
   assignBerth,
   releaseBerth
 } = require('../controllers/berthController');
-const { protect, authorize } = require('../middleware/auth');
+const { protect } = require('../middleware/auth');
+const { checkPermission } = require('../middleware/permissions');
 
 router.use(protect);
 
-router.get('/', getBerths);
-router.get('/utilization', getBerthUtilization);
-router.post('/assign', authorize('admin', 'berth', 'operator'), assignBerth);
-router.post('/release', authorize('admin', 'berth', 'operator'), releaseBerth);
+router.get('/', checkPermission('Berth Planning', 'view'), getBerths);
+router.get('/utilization', checkPermission('Berth Planning', 'view'), getBerthUtilization);
+router.post('/assign', checkPermission('Berth Planning', 'edit'), assignBerth);
+router.post('/release', checkPermission('Berth Planning', 'edit'), releaseBerth);
 
 module.exports = router;

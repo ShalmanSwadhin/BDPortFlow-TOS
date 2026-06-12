@@ -1,4 +1,5 @@
 const Container = require('../models/Container');
+const { findContainerByIdentifier } = require('../utils/containerLookup');
 
 // @desc    Get all containers
 // @route   GET /api/containers
@@ -33,23 +34,20 @@ exports.getContainers = async (req, res) => {
 // @access  Private
 exports.getContainer = async (req, res) => {
   try {
-    const container = await Container.findOne({ 
-      $or: [
-        { _id: req.params.id },
-        { containerId: req.params.id.toUpperCase() }
-      ]
-    }).populate('vessel', 'vesselName');
+    const container = await findContainerByIdentifier(req.params.id);
 
     if (!container) {
       return res.status(404).json({
         success: false,
-        message: 'Container not found'
+        message: 'Container not found with given container number'
       });
     }
 
+    const populated = await Container.findById(container._id).populate('vessel', 'vesselName');
+
     res.json({
       success: true,
-      data: container
+      data: populated
     });
   } catch (error) {
     console.error('Get container error:', error);
@@ -94,21 +92,16 @@ exports.createContainer = async (req, res) => {
 // @access  Private
 exports.updateContainer = async (req, res) => {
   try {
-    let container = await Container.findOne({
-      $or: [
-        { _id: req.params.id },
-        { containerId: req.params.id.toUpperCase() }
-      ]
-    });
+    const container = await findContainerByIdentifier(req.params.id);
 
     if (!container) {
       return res.status(404).json({
         success: false,
-        message: 'Container not found'
+        message: 'Container not found with given container number'
       });
     }
 
-    container = await Container.findByIdAndUpdate(container._id, req.body, {
+    const updated = await Container.findByIdAndUpdate(container._id, req.body, {
       new: true,
       runValidators: true
     });
@@ -116,7 +109,7 @@ exports.updateContainer = async (req, res) => {
     res.json({
       success: true,
       message: 'Container updated successfully',
-      data: container
+      data: updated
     });
   } catch (error) {
     console.error('Update container error:', error);
@@ -132,17 +125,12 @@ exports.updateContainer = async (req, res) => {
 // @access  Private/Admin
 exports.deleteContainer = async (req, res) => {
   try {
-    const container = await Container.findOne({
-      $or: [
-        { _id: req.params.id },
-        { containerId: req.params.id.toUpperCase() }
-      ]
-    });
+    const container = await findContainerByIdentifier(req.params.id);
 
     if (!container) {
       return res.status(404).json({
         success: false,
-        message: 'Container not found'
+        message: 'Container not found with given container number'
       });
     }
 

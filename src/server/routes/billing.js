@@ -7,23 +7,28 @@ const {
   updateBilling,
   deleteBilling,
   markAsPaid,
-  getRevenue
+  getRevenue,
+  generatePDF,
+  previewInvoice
 } = require('../controllers/billingController');
 const { protect, authorize } = require('../middleware/auth');
+const { checkPermission } = require('../middleware/permissions');
 
 router.use(protect);
 
-router.get('/revenue', authorize('admin', 'finance'), getRevenue);
+router.get('/revenue', checkPermission('Billing & Tariff', 'view'), getRevenue);
 
 router.route('/')
-  .get(getBillings)
-  .post(authorize('admin', 'finance'), createBilling);
+  .get(checkPermission('Billing & Tariff', 'view'), getBillings)
+  .post(checkPermission('Billing & Tariff', 'create'), createBilling);
 
 router.route('/:id')
-  .get(getBilling)
-  .put(authorize('admin', 'finance'), updateBilling)
-  .delete(authorize('admin'), deleteBilling);
+  .get(checkPermission('Billing & Tariff', 'view'), getBilling)
+  .put(checkPermission('Billing & Tariff', 'edit'), updateBilling)
+  .delete(checkPermission('Billing & Tariff', 'delete'), deleteBilling);
 
-router.patch('/:id/paid', authorize('admin', 'finance'), markAsPaid);
+router.patch('/:id/paid', checkPermission('Billing & Tariff', 'edit'), markAsPaid);
+router.get('/:id/pdf', checkPermission('Billing & Tariff', 'view'), generatePDF);
+router.get('/:id/preview', checkPermission('Billing & Tariff', 'view'), previewInvoice);
 
 module.exports = router;

@@ -77,6 +77,7 @@ export const containerAPI = {
   delete: (id: string) => api.delete(`/containers/${id}`),
   getByBlock: (block: string) => api.get(`/containers/block/${block}`),
   search: (query: string) => api.get(`/containers/search/${query}`),
+  executeStackMove: (data: any) => api.post('/containers/stack/move', data),
 };
 
 export const reeferAPI = {
@@ -86,6 +87,7 @@ export const reeferAPI = {
   update: (id: string, reeferData: any) => api.put(`/reefers/${id}`, reeferData),
   delete: (id: string) => api.delete(`/reefers/${id}`),
   addAlert: (id: string, alertData: any) => api.post(`/reefers/${id}/alert`, alertData),
+  adjustTemperature: (id: string, data: any) => api.patch(`/reefers/${id}/temperature`, data),
 };
 
 export const gateAPI = {
@@ -97,10 +99,15 @@ export const gateAPI = {
   processTransaction: (id: string, transactionData: any) =>
     api.post(`/gates/${id}/transaction`, transactionData),
   getTransactions: (id: string) => api.get(`/gates/${id}/transactions`),
+  getAllTransactions: () => api.get('/gates/transactions/all'),
+  approveEntry: (id: string, data: any) => api.post(`/gates/${id}/approve`, data),
+  holdForInspection: (id: string, data: any) => api.post(`/gates/${id}/hold`, data),
 };
 
 export const truckAPI = {
-  getAll: (params?: any) => api.get('/trucks', { params }),
+  getAll: (params?: { date?: string; appointmentDate?: string; status?: string; includeCancelled?: boolean }) =>
+    api.get('/trucks', { params }),
+  getByDate: (date: string) => api.get('/bookings', { params: { date } }),
   getOne: (id: string) => api.get(`/trucks/${id}`),
   create: (truckData: any) => api.post('/trucks', truckData),
   update: (id: string, truckData: any) => api.put(`/trucks/${id}`, truckData),
@@ -143,6 +150,8 @@ export const billingAPI = {
   markAsPaid: (id: string, paymentMethod: string) =>
     api.patch(`/billing/${id}/paid`, { paymentMethod }),
   getRevenue: (params?: any) => api.get('/billing/revenue', { params }),
+  downloadPDF: (id: string) => api.get(`/billing/${id}/pdf`, { responseType: 'blob' }),
+  preview: (id: string) => api.get(`/billing/${id}/preview`),
 };
 
 export const berthAPI = {
@@ -157,4 +166,42 @@ export const dashboardAPI = {
   getStats: () => api.get('/dashboard/stats'),
   getActivity: () => api.get('/dashboard/activity'),
   getCharts: (params?: any) => api.get('/dashboard/charts', { params }),
+};
+
+export const notificationAPI = {
+  getAll: (params?: any) => api.get('/notifications', { params }),
+  markAsRead: (id: string) => api.patch(`/notifications/${id}/read`),
+  markAllAsRead: () => api.patch('/notifications/read-all'),
+  delete: (id: string) => api.delete(`/notifications/${id}`),
+  create: (data: any) => api.post('/notifications', data),
+};
+
+export const auditAPI = {
+  getAll: (params?: any) => api.get('/audit', { params }),
+  getOne: (id: string) => api.get(`/audit/${id}`),
+};
+
+export const permissionAPI = {
+  getAll: () => api.get('/permissions'),
+  getMy: () => api.get('/permissions/me'),
+  getRole: (role: string) => api.get(`/permissions/${role}`),
+  updateRole: (role: string, modules: any) => api.put(`/permissions/${role}`, { modules }),
+};
+
+export const stowageAPI = {
+  getAll: (params?: any) => api.get('/stowage', { params }),
+  moveContainer: (data: any) => api.post('/stowage/move', data),
+  removeContainer: (id: string) => api.delete(`/stowage/${id}`),
+};
+
+export const yardAPI = {
+  getBlocks: () => api.get('/yard'),
+  optimize: () => api.post('/yard/optimize'),
+  updateBlock: (id: string, data: any) => api.put(`/yard/${id}`, data),
+};
+
+export const technicianAPI = {
+  getAll: (params?: any) => api.get('/technicians', { params }),
+  create: (data: any) => api.post('/technicians', data),
+  update: (id: string, data: any) => api.put(`/technicians/${id}`, data),
 };
