@@ -1,30 +1,112 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Snowflake, AlertTriangle, TrendingDown, Thermometer, Battery, Zap, Phone } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import TechnicianDispatchModal from './TechnicianDispatchModal';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import ReeferHistoryModal from './ReeferHistoryModal';
+import { reeferAPI } from '../api/client';
 
 export default function ReeferMonitoring() {
-  const { containers, updateContainer, addNotification } = useApp();
+  const { containers, updateContainer, addNotification, token } = useApp();
   const [selectedReefer, setSelectedReefer] = useState<any>(null);
   const [adjustTemp, setAdjustTemp] = useState(false);
   const [newTemp, setNewTemp] = useState('');
   const [showTechModal, setShowTechModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [reeferList, setReeferList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const reefers = containers.filter(c => c.type === 'reefer' && c.temperature !== undefined);
+  // Load reefers from database
+  useEffect(() => {
+    if (!token) return;
+    
+    const loadReefers = async () => {
+      setLoading(true);
+      try {
+        const response = await reeferAPI.getAll();
+        if (response.data.success && response.data.data && response.data.data.length > 0) {
+          const loadedReefers = response.data.data.map((reefer: any, idx: number) => ({
+            id: reefer.containerId || `RF-${String(idx + 1).padStart(3, '0')}`,
+            type: 'reefer',
+            temperature: reefer.temperature || -18,
+            targetTemp: reefer.targetTemp || -18,
+            humidity: reefer.humidity || 65,
+            power: reefer.power || 95,
+            cargo: reefer.cargo || 'Frozen Goods',
+            alarm: reefer.alarm || false,
+            alerts: reefer.alerts || [],
+          }));
+          setReeferList(loadedReefers);
+        } else {
+          // Use default reefers if no data from database
+          setReeferList(defaultReefers);
+        }
+      } catch (error: any) {
+        console.error('Error loading reefers:', error);
+        // Use default reefers on error
+        setReeferList(defaultReefers);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const handleAdjustTemp = () => {
+    loadReefers();
+  }, [token]);
+
+  const defaultReefers = [
+    {
+      id: 'RF-001',
+      type: 'reefer',
+      temperature: -18.2,
+      targetTemp: -18,
+      humidity: 95,
+      power: 98,
+      cargo: 'Frozen Tuna',
+      alarm: false,
+      alerts: [],
+    },
+    {
+      id: 'RF-002',
+      type: 'reefer',
+      temperature: -17.8,
+      targetTemp: -18,
+      humidity: 92,
+      power: 96,
+      cargo: 'Frozen Shrimp',
+      alarm: false,
+      alerts: [],
+    },
+    {
+      id: 'RF-003',
+      type: 'reefer',
+      temperature: -18.5,
+      targetTemp: -18,
+      humidity: 94,
+      power: 99,
+      cargo: 'Frozen Fish',
+      alarm: false,
+      alerts: [],
+    },
+  ];
+
+  const reefers = reeferList.length > 0 ? reeferList : defaultReefers;
+
+  const handleAdjustTemp = async () => {
     if (!selectedReefer || !newTemp) return;
     
     const temp = parseFloat(newTemp);
-    updateContainer(selectedReefer.id, { targetTemp: temp });
-    addNotification({
-      type: 'success',
-      message: `Target temperature updated for ${selectedReefer.id} to ${temp}°C`,
-    });
+    try {
+      const response = await reeferAPI.update(selectedReefer.id, { targetTemp: temp });
+      if (response.data.success) {
+        setReeferList(reeferList.map(r => r.id === selectedReefer.id ? { ...r, targetTemp: temp } : r));
+        setSelectedReefer({ ...selectedReefer, targetTemp: temp });
+        toast.success(`Target temperature updated to ${temp}°C`);
+      }
+    } catch (error: any) {
+      console.error('Error adjusting temperature:', error);
+      toast.error('Failed to update temperature');
+    }
     setAdjustTemp(false);
     setNewTemp('');
   };
@@ -38,12 +120,17 @@ export default function ReeferMonitoring() {
     });
   };
 
-  const handleAcknowledgeAlert = (container: any) => {
-    updateContainer(container.id, { alarm: false });
-    addNotification({
-      type: 'success',
-      message: `Alert acknowledged for ${container.id}`,
-    });
+  const handleAcknowledgeAlert = async (container: any) => {
+    try {
+      const response = await reeferAPI.update(container.id, { alarm: false });
+      if (response.data.success) {
+        setReeferList(reeferList.map(r => r.id === container.id ? { ...r, alarm: false } : r));
+        toast.success(`Alert acknowledged for ${container.id}`);
+      }
+    } catch (error: any) {
+      console.error('Error acknowledging alert:', error);
+      toast.error('Failed to acknowledge alert');
+    }
   };
 
   const tempHistory = [

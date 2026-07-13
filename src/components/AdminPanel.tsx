@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { Users, Shield, Settings, FileText, Plus, Edit2, Trash2, Check, X, Activity, Lock, Unlock } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useEffect } from 'react';
+import { useApp } from '../context/AppContext';
+import { userAPI } from '../api/client';
+import { toast } from 'sonner';
 
 interface User {
   id: number;
@@ -16,11 +20,14 @@ interface AdminPanelProps {
 }
 
 export default function AdminPanel({ initialTab = 'users' }: AdminPanelProps = {}) {
+  const { token } = useApp();
   const [activeTab, setActiveTab] = useState(initialTab);
   const [showAddUser, setShowAddUser] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editFormData, setEditFormData] = useState<User | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('All Roles');
+  const [loading, setLoading] = useState(false);
 
   const [users, setUsers] = useState<User[]>([
     { id: 1, name: 'Ahmed Khan', email: 'ahmed@bdport.gov.bd', role: 'Port Operator', status: 'active', lastLogin: '2 hours ago' },
@@ -29,6 +36,36 @@ export default function AdminPanel({ initialTab = 'users' }: AdminPanelProps = {
     { id: 4, name: 'Nazia Ahmed', email: 'nazia@bdport.gov.bd', role: 'Finance Manager', status: 'inactive', lastLogin: '3 days ago' },
     { id: 5, name: 'Rahim Ali', email: 'rahim@bdport.gov.bd', role: 'Truck Driver', status: 'active', lastLogin: '10 min ago' },
   ]);
+
+  // Load users from database on mount
+  useEffect(() => {
+    if (!token) return;
+    
+    const loadUsers = async () => {
+      setLoading(true);
+      try {
+        const response = await userAPI.getAll();
+        if (response.data.success && response.data.data) {
+          const loadedUsers = response.data.data.map((user: any) => ({
+            id: user._id?.toString() || user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            status: user.status || 'active',
+            lastLogin: user.lastLogin || 'Never',
+          }));
+          setUsers(loadedUsers);
+        }
+      } catch (error: any) {
+        console.error('Error loading users:', error);
+        toast.error('Failed to load users from database');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadUsers();
+  }, [token]);
 
   // Permission Matrix State
   const [permissions, setPermissions] = useState({
@@ -315,18 +352,21 @@ export default function AdminPanel({ initialTab = 'users' }: AdminPanelProps = {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <input
                     type="text"
-                    defaultValue={editingUser.name}
+                    value={editFormData?.name || ''}
+                    onChange={(e) => setEditFormData(editFormData ? { ...editFormData, name: e.target.value } : null)}
                     placeholder="Full Name"
                     className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
                   />
                   <input
                     type="email"
-                    defaultValue={editingUser.email}
+                    value={editFormData?.email || ''}
+                    onChange={(e) => setEditFormData(editFormData ? { ...editFormData, email: e.target.value } : null)}
                     placeholder="Email Address"
                     className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
                   />
                   <select
-                    defaultValue={editingUser.role}
+                    value={editFormData?.role || ''}
+                    onChange={(e) => setEditFormData(editFormData ? { ...editFormData, role: e.target.value } : null)}
                     className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
                   >
                     <option>Port Operator</option>
@@ -337,7 +377,8 @@ export default function AdminPanel({ initialTab = 'users' }: AdminPanelProps = {
                     <option>Admin</option>
                   </select>
                   <select
-                    defaultValue={editingUser.status}
+                    value={editFormData?.status || ''}
+                    onChange={(e) => setEditFormData(editFormData ? { ...editFormData, status: e.target.value } : null)}
                     className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
                   >
                     <option value="active">Active</option>
@@ -346,15 +387,35 @@ export default function AdminPanel({ initialTab = 'users' }: AdminPanelProps = {
                 </div>
                 <div className="flex justify-end gap-3 mt-6">
                   <button
-                    onClick={() => setEditingUser(null)}
+                    onClick={() => {
+                      setEditingUser(null);
+                      setEditFormData(null);
+                    }}
                     className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
                   >
                     Cancel
                   </button>
                   <button
-                    onClick={() => {
-                      alert('User updated successfully!');
+                    onClick={async () => {
+                      if (editFormData) {
+                        try {
+                          const response = await userAPI.update(editFormData.id.toString(), {
+                            name: editFormData.name,
+                            email: editFormData.email,
+                            role: editFormData.role,
+                            status: editFormData.status,
+                          });
+                          if (response.data.success) {
+                            setUsers(users.map(u => u.id === editFormData.id ? editFormData : u));
+                            toast.success('User updated successfully!');
+                          }
+                        } catch (error: any) {
+                          console.error('Error updating user:', error);
+                          toast.error('Failed to update user');
+                        }
+                      }
                       setEditingUser(null);
+                      setEditFormData(null);
                     }}
                     className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
                   >
@@ -456,7 +517,10 @@ export default function AdminPanel({ initialTab = 'users' }: AdminPanelProps = {
                       <td className="px-4 sm:px-6 py-4">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => setEditingUser(user)}
+                            onClick={() => {
+                              setEditingUser(user);
+                              setEditFormData(user);
+                            }}
                             className="p-2 hover:bg-blue-500/20 text-blue-400 rounded-lg transition-colors"
                             title="Edit user"
                           >

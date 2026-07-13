@@ -1,5 +1,5 @@
 import { X, Phone, MapPin, Wrench, Clock, CheckCircle } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface TechnicianDispatchModalProps {
   container: any;

@@ -86,8 +86,8 @@ export default function App() {
 
   return (
     <AppProvider>
-      <Toaster 
-        position="top-center" 
+      <Toaster
+        position="top-center"
         theme="dark"
         toastOptions={{
           style: {
@@ -103,8 +103,8 @@ export default function App() {
         ) : showForgotPassword ? (
           <ForgotPassword onBackToLogin={handleBackToLogin} />
         ) : (
-          <Login 
-            onLogin={handleLogin} 
+          <Login
+            onLogin={handleLogin}
             onForgotPassword={handleForgotPassword}
             onBackToPublic={handleBackToPublic}
           />

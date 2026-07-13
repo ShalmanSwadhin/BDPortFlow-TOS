@@ -1,22 +1,38 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Ship, Anchor, AlertTriangle, Calendar, Clock, Waves, X, Save, Package, Truck, MapPin } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import BerthTimeline from './BerthTimeline';
+import { useApp } from '../context/AppContext';
 
 export default function BerthPlanner() {
+  const { vessels: appVessels = [], addVessel } = useApp();
   const [selectedVessel, setSelectedVessel] = useState<any>(null);
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [showModifySchedule, setShowModifySchedule] = useState(false);
   const [showStowageView, setShowStowageView] = useState(false);
+  const [vesselsList, setVesselsList] = useState<any[]>([]);
   const [scheduleData, setScheduleData] = useState({
+    vesselName: '',
+    imoNumber: '',
+    length: '',
+    draft: '',
     eta: '',
     etd: '',
-    berth: '',
-    priority: 'normal',
-    notes: ''
+    berth: 'auto',
+    cargoType: 'Container',
+    containers: '',
+    agent: '',
+    requirements: ''
   });
 
-  const vessels = [
+  // Load vessels from AppContext on mount
+  useEffect(() => {
+    if (appVessels && appVessels.length > 0) {
+      setVesselsList(appVessels);
+    }
+  }, [appVessels]);
+
+  const vessels = vesselsList.length > 0 ? vesselsList : [
     {
       id: 1,
       name: 'MV HARMONY',
@@ -75,13 +91,36 @@ export default function BerthPlanner() {
     },
   ];
 
-  const berths = [
-    { id: 1, length: 300, depth: 15, status: 'occupied', vessel: vessels[0] },
-    { id: 2, length: 380, depth: 16, status: 'occupied', vessel: vessels[1] },
-    { id: 3, length: 350, depth: 15.5, status: 'occupied', vessel: vessels[2] },
-    { id: 4, length: 320, depth: 14, status: 'available', vessel: null },
-    { id: 5, length: 280, depth: 13, status: 'maintenance', vessel: null },
-  ];
+  // Create berths with proper vessel assignment
+  const createBerths = () => {
+    const defaultBerths = [
+      { id: 1, length: 300, depth: 15, status: 'occupied' as const },
+      { id: 2, length: 380, depth: 16, status: 'occupied' as const },
+      { id: 3, length: 350, depth: 15.5, status: 'occupied' as const },
+      { id: 4, length: 320, depth: 14, status: 'available' as const },
+      { id: 5, length: 280, depth: 13, status: 'maintenance' as const },
+    ];
+
+    return defaultBerths.map((berth, idx) => {
+      // Try to find a vessel assigned to this berth
+      const assignedVessel = vessels.find(v => v.berth === berth.id);
+      
+      // If no specific berth assignment, use vessels in order for occupied berths
+      if (!assignedVessel && berth.status === 'occupied' && idx < vessels.length) {
+        return {
+          ...berth,
+          vessel: vessels[idx],
+        };
+      }
+      
+      return {
+        ...berth,
+        vessel: assignedVessel || null,
+      };
+    });
+  };
+
+  const berths = createBerths();
 
   const timeSlots = [
     '00:00', '02:00', '04:00', '06:00', '08:00', '10:00', '12:00',
@@ -467,6 +506,8 @@ export default function BerthPlanner() {
                   <input
                     type="text"
                     placeholder="MV EXAMPLE"
+                    value={scheduleData.vesselName}
+                    onChange={(e) => setScheduleData({...scheduleData, vesselName: e.target.value})}
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                     required
                   />
@@ -476,6 +517,8 @@ export default function BerthPlanner() {
                   <input
                     type="text"
                     placeholder="IMO 1234567"
+                    value={scheduleData.imoNumber}
+                    onChange={(e) => setScheduleData({...scheduleData, imoNumber: e.target.value})}
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
@@ -484,6 +527,8 @@ export default function BerthPlanner() {
                   <input
                     type="number"
                     placeholder="280"
+                    value={scheduleData.length}
+                    onChange={(e) => setScheduleData({...scheduleData, length: e.target.value})}
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                     required
                   />
@@ -494,6 +539,8 @@ export default function BerthPlanner() {
                     type="number"
                     step="0.1"
                     placeholder="12.5"
+                    value={scheduleData.draft}
+                    onChange={(e) => setScheduleData({...scheduleData, draft: e.target.value})}
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                     required
                   />
@@ -502,6 +549,8 @@ export default function BerthPlanner() {
                   <label className="block text-slate-400 text-sm mb-2">ETA *</label>
                   <input
                     type="datetime-local"
+                    value={scheduleData.eta}
+                    onChange={(e) => setScheduleData({...scheduleData, eta: e.target.value})}
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                     required
                   />
@@ -510,13 +559,19 @@ export default function BerthPlanner() {
                   <label className="block text-slate-400 text-sm mb-2">ETD *</label>
                   <input
                     type="datetime-local"
+                    value={scheduleData.etd}
+                    onChange={(e) => setScheduleData({...scheduleData, etd: e.target.value})}
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                     required
                   />
                 </div>
                 <div>
                   <label className="block text-slate-400 text-sm mb-2">Preferred Berth</label>
-                  <select className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500">
+                  <select
+                    value={scheduleData.berth}
+                    onChange={(e) => setScheduleData({...scheduleData, berth: e.target.value})}
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
+                  >
                     <option value="">Auto Assign</option>
                     <option>Berth 1</option>
                     <option>Berth 2</option>
@@ -527,7 +582,12 @@ export default function BerthPlanner() {
                 </div>
                 <div>
                   <label className="block text-slate-400 text-sm mb-2">Cargo Type *</label>
-                  <select className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500" required>
+                  <select
+                    value={scheduleData.cargoType}
+                    onChange={(e) => setScheduleData({...scheduleData, cargoType: e.target.value})}
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
+                    required
+                  >
                     <option>Container</option>
                     <option>Bulk Cargo</option>
                     <option>Break Bulk</option>
@@ -539,6 +599,8 @@ export default function BerthPlanner() {
                   <input
                     type="number"
                     placeholder="245"
+                    value={scheduleData.containers}
+                    onChange={(e) => setScheduleData({...scheduleData, containers: e.target.value})}
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
@@ -547,6 +609,8 @@ export default function BerthPlanner() {
                   <input
                     type="text"
                     placeholder="Shipping Agent Name"
+                    value={scheduleData.agent}
+                    onChange={(e) => setScheduleData({...scheduleData, agent: e.target.value})}
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
@@ -556,6 +620,8 @@ export default function BerthPlanner() {
                 <textarea
                   rows={3}
                   placeholder="Enter any special handling requirements..."
+                  value={scheduleData.requirements}
+                  onChange={(e) => setScheduleData({...scheduleData, requirements: e.target.value})}
                   className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
                 ></textarea>
               </div>
@@ -569,9 +635,36 @@ export default function BerthPlanner() {
                 </button>
                 <button
                   type="submit"
-                  onClick={(e) => {
+                  onClick={async (e) => {
                     e.preventDefault();
-                    alert('Vessel scheduled successfully!');
+                    if (!scheduleData.vesselName || !scheduleData.length || !scheduleData.draft || !scheduleData.eta || !scheduleData.etd) {
+                      toast.error('Please fill all required fields');
+                      return;
+                    }
+                    await addVessel({
+                      name: scheduleData.vesselName,
+                      length: parseFloat(scheduleData.length),
+                      draft: parseFloat(scheduleData.draft),
+                      eta: scheduleData.eta,
+                      etd: scheduleData.etd,
+                      berth: scheduleData.berth === 'auto' ? null : parseInt(scheduleData.berth),
+                      status: 'incoming',
+                      cargo: scheduleData.cargoType,
+                      containers: scheduleData.containers ? parseInt(scheduleData.containers) : 0,
+                    });
+                    setScheduleData({
+                      vesselName: '',
+                      imoNumber: '',
+                      length: '',
+                      draft: '',
+                      eta: '',
+                      etd: '',
+                      berth: 'auto',
+                      cargoType: 'Container',
+                      containers: '',
+                      agent: '',
+                      requirements: ''
+                    });
                     setShowScheduleForm(false);
                   }}
                   className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors"

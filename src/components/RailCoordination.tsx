@@ -1,21 +1,69 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Train, Package, AlertTriangle, Clock, CheckCircle, XCircle } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
+import { railAPI } from '../api/client';
+import { useApp } from '../context/AppContext';
 
 export default function RailCoordination() {
+  const { token } = useApp();
   const [selectedTrain, setSelectedTrain] = useState<any>(null);
   const [showFullDetails, setShowFullDetails] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [trainList, setTrainList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
   const [newTrain, setNewTrain] = useState({
     trainId: '',
     arrival: '',
     departure: '',
     route: '',
     capacity: '20',
-    notes: ''
+    notes: '',
+    date: ''
   });
 
-  const trains = [
+  // Load trains from database by date
+  useEffect(() => {
+    if (!token) return;
+    
+    const loadTrains = async () => {
+      setLoading(true);
+      try {
+        const response = await railAPI.getAll();
+        if (response.data.success && response.data.data && response.data.data.length > 0) {
+          const loadedTrains = response.data.data
+            .filter((train: any) => {
+              const trainDate = train.date?.split('T')[0] || selectedDate;
+              return trainDate === selectedDate;
+            })
+            .map((train: any) => ({
+              id: train._id?.toString() || train.trainId || train.id,
+              arrival: train.arrival || '14:30',
+              departure: train.departure || '16:00',
+              status: train.status || 'incoming',
+              progress: train.progress || 0,
+              containers: train.containers || [],
+              capacity: train.capacity || 20,
+              assigned: train.assigned || 0,
+              route: train.route || '',
+              date: train.date || selectedDate,
+            }));
+          setTrainList(loadedTrains);
+        }
+      } catch (error: any) {
+        console.error('Error loading trains:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadTrains();
+  }, [token, selectedDate]);
+
+  const defaultTrains = [
     {
       id: 'RT-001',
       arrival: '14:30',
@@ -58,6 +106,8 @@ export default function RailCoordination() {
     },
   ];
 
+  const trains = trainList.length > 0 ? trainList : defaultTrains;
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'loading': return { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/50' };
@@ -86,13 +136,24 @@ export default function RailCoordination() {
           <h2 className="text-2xl sm:text-3xl mb-2">Rail Coordination</h2>
           <p className="text-slate-400 text-sm sm:text-base">Train scheduling and container loading management</p>
         </div>
-        <button 
-          onClick={() => setShowScheduleModal(true)}
-          className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors flex items-center gap-2"
-        >
-          <Train className="w-4 h-4" />
-          Schedule Train
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label className="text-slate-400 text-sm">Date:</label>
+            <input 
+              type="date" 
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+          <button 
+            onClick={() => setShowScheduleModal(true)}
+            className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors flex items-center gap-2"
+          >
+            <Train className="w-4 h-4" />
+            Schedule Train
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -653,15 +714,63 @@ export default function RailCoordination() {
                     className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg focus:outline-none focus:border-purple-500"
                   />
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Date</label>
+                  <input
+                    type="date"
+                    value={newTrain.date || selectedDate}
+                    onChange={(e) => setNewTrain({ ...newTrain, date: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg focus:outline-none focus:border-purple-500"
+                  />
+                </div>
               </div>
             </div>
 
             <div className="p-6 border-t border-slate-800 flex justify-between">
               <button
-                onClick={() => {
-                  toast.success('Train scheduled', {
-                    description: 'New train added to schedule - Ready for container assignment',
-                  });
+                onClick={async () => {
+                  if (!newTrain.trainId || !newTrain.arrival || !newTrain.departure) {
+                    toast.error('Please fill in all fields');
+                    return;
+                  }
+                  try {
+                    const response = await railAPI.create({
+                      trainId: newTrain.trainId,
+                      arrival: newTrain.arrival,
+                      departure: newTrain.departure,
+                      route: newTrain.route || 'Default',
+                      capacity: parseInt(newTrain.capacity),
+                      notes: newTrain.notes,
+                      status: 'scheduled',
+                      date: newTrain.date || selectedDate,
+                      containers: [],
+                      assigned: 0,
+                      progress: 0,
+                    });
+                    if (response.data.success) {
+                      const createdTrain = response.data.data;
+                      setTrainList([...trainList, {
+                        id: createdTrain._id?.toString() || createdTrain.id,
+                        arrival: createdTrain.arrival,
+                        departure: createdTrain.departure,
+                        status: createdTrain.status,
+                        progress: createdTrain.progress,
+                        containers: createdTrain.containers,
+                        capacity: createdTrain.capacity,
+                        assigned: createdTrain.assigned,
+                        route: createdTrain.route,
+                        date: createdTrain.date,
+                      }]);
+                      setNewTrain({ trainId: '', arrival: '', departure: '', route: '', capacity: '20', notes: '', date: '' });
+                      toast.success('Train scheduled', {
+                        description: 'New train added to schedule - Ready for container assignment',
+                      });
+                    }
+                  } catch (error: any) {
+                    console.error('Error scheduling train:', error);
+                    toast.error('Failed to schedule train');
+                  }
                   setShowScheduleModal(false);
                 }}
                 className="px-6 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/50 rounded-lg transition-colors"

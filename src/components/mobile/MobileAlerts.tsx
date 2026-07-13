@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { AlertTriangle, CheckCircle, Info, XCircle, Check, X, ArrowLeft } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 export default function MobileAlerts() {
   const { notifications, markNotificationRead } = useApp();

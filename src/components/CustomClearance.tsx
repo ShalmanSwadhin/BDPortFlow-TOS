@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { FileText, AlertTriangle, CheckCircle, X, Clock, Package, Shield, Search, Filter, Eye } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface Container {
   id: string;

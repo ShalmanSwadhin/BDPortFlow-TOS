@@ -1,18 +1,53 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Ship, AlertTriangle, CheckCircle, TrendingDown, TrendingUp, Scale } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
+import { containerAPI } from '../api/client';
+import { useApp } from '../context/AppContext';
 
 export default function ShipStowage() {
+  const { token } = useApp();
   const [selectedCell, setSelectedCell] = useState<any>(null);
   const [balanceStatus, setBalanceStatus] = useState('stable');
+  const [assignmentList, setAssignmentList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
   // Ship bay grid - simplified representation
   const bays = 8;
   const rows = 6;
   const tiers = 4;
 
+  // Load container assignments from database
+  useEffect(() => {
+    if (!token) return;
+
+    const loadAssignments = async () => {
+      setLoading(true);
+      try {
+        const response = await containerAPI.getAll();
+        if (response.data.success && response.data.data && response.data.data.length > 0) {
+          const loaded = response.data.data.map((container: any) => ({
+            bay: container.bay || Math.floor(Math.random() * bays) + 1,
+            row: container.row || Math.floor(Math.random() * rows) + 1,
+            tier: container.tier || Math.floor(Math.random() * tiers) + 1,
+            container: container._id?.toString() || container.id,
+            weight: container.weight || 22.5,
+            type: container.type || 'standard',
+            destination: container.destination || 'Singapore',
+          }));
+          setAssignmentList(loaded);
+        }
+      } catch (error: any) {
+        console.error('Error loading assignments:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAssignments();
+  }, [token]);
+
   // Mock container assignments (bay, row, tier)
-  const assignments = [
+  const defaultAssignments = [
     { bay: 1, row: 1, tier: 1, container: 'TCLU3456789', weight: 22.5, type: 'standard', destination: 'Singapore' },
     { bay: 1, row: 1, tier: 2, container: 'YMMU8901234', weight: 24.8, type: 'reefer', destination: 'Singapore' },
     { bay: 1, row: 2, tier: 1, container: 'MAEU5678901', weight: 20.2, type: 'standard', destination: 'Dubai' },
@@ -26,6 +61,9 @@ export default function ShipStowage() {
     { bay: 5, row: 2, tier: 1, container: 'SEGU7890123', weight: 21.1, type: 'standard', destination: 'Singapore' },
     { bay: 6, row: 1, tier: 1, container: 'TEMU4567890', weight: 20.8, type: 'standard', destination: 'Shanghai' },
   ];
+
+  // Use default assignments if database is empty
+  const assignments = assignmentList.length > 0 ? assignmentList : defaultAssignments;
 
   const getContainerAt = (bay: number, row: number, tier: number) => {
     return assignments.find(a => a.bay === bay && a.row === row && a.tier === tier);

@@ -3,7 +3,7 @@ import {
   ChevronRight, Mail, Phone, MapPin, Calendar, Clock, Award, 
   Activity, TrendingUp, FileText, Download, Edit2, Camera, X
 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { useState } from 'react';
 
 interface ProfilePageProps {

@@ -1,26 +1,83 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Camera, CheckCircle, XCircle, AlertTriangle, Truck, Weight, ScanLine } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
+import { gateAPI } from '../api/client';
+import { useApp } from '../context/AppContext';
 
 export default function GateOperations() {
-  const [selectedGate, setSelectedGate] = useState(1);
+  const { token } = useApp();
+  const [selectedGate, setSelectedGate] = useState<number>(1);
+  const [gateList, setGateList] = useState<any[]>([]);
+  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const gates = [
+  const defaultGates = [
     { id: 1, status: 'active', truck: 'DHK-GA-1234', container: 'TCLU3456789', weight: 22500, verifiedWeight: 22450, ocr: 100 },
     { id: 2, status: 'active', truck: 'CHT-BA-5678', container: 'YMMU8901234', weight: 24800, verifiedWeight: 25200, ocr: 98 },
     { id: 3, status: 'idle', truck: null, container: null, weight: 0, verifiedWeight: 0, ocr: 0 },
     { id: 4, status: 'error', truck: 'DHK-KA-9012', container: 'MAEU5678901', weight: 20200, verifiedWeight: 24500, ocr: 85 },
   ];
 
-  const recentTransactions = [
-    { id: 1, time: '14:32', truck: 'DHK-GA-1234', container: 'TCLU3456789', status: 'approved', weight: 22500 },
-    { id: 2, time: '14:28', truck: 'CHT-TA-4567', container: 'CSQU2345678', status: 'approved', weight: 23100 },
-    { id: 3, time: '14:25', truck: 'DHK-MA-7890', container: 'HLBU7890123', status: 'rejected', weight: 0 },
-    { id: 4, time: '14:20', truck: 'CHT-BA-3456', container: 'TCKU4567890', status: 'approved', weight: 21700 },
-    { id: 5, time: '14:15', truck: 'DHK-GA-6789', container: 'OOLU1234567', status: 'approved', weight: 19800 },
-  ];
+  // Load gates from database on mount
+  useEffect(() => {
+    if (!token) return;
+    
+    const loadGates = async () => {
+      setLoading(true);
+      try {
+        const response = await gateAPI.getAll();
+        if (response.data.success && response.data.data && response.data.data.length > 0) {
+          const loadedGates = response.data.data.map((gate: any) => ({
+            id: gate._id?.toString() || gate.id || Math.random(),
+            status: gate.status || 'idle',
+            truck: gate.truck || null,
+            container: gate.container || null,
+            weight: gate.weight || 0,
+            verifiedWeight: gate.verifiedWeight || 0,
+            ocr: gate.ocr || 0,
+          }));
+          setGateList(loadedGates);
+          if (loadedGates.length > 0 && !loadedGates.find((g: any) => g.id === selectedGate)) {
+            setSelectedGate(loadedGates[0].id);
+          }
+        } else {
+          setGateList(defaultGates);
+        }
+        
+        // Load transactions
+        const txnResponse = await gateAPI.getTransactions(selectedGate.toString());
+        if (txnResponse.data.success && txnResponse.data.data) {
+          setRecentTransactions(txnResponse.data.data.slice(0, 5));
+        }
+      } catch (error: any) {
+        console.error('Error loading gates:', error);
+        setGateList(defaultGates);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const currentGate = gates.find(g => g.id === selectedGate);
+    loadGates();
+  }, [token]);
+
+  useEffect(() => {
+    if (selectedGate && token) {
+      const loadTransactions = async () => {
+        try {
+          const txnResponse = await gateAPI.getTransactions(selectedGate.toString());
+          if (txnResponse.data.success && txnResponse.data.data) {
+            setRecentTransactions(txnResponse.data.data.slice(0, 5));
+          }
+        } catch (error: any) {
+          console.error('Error loading transactions:', error);
+        }
+      };
+      loadTransactions();
+    }
+  }, [selectedGate, token]);
+
+  const gates = gateList.length > 0 ? gateList : defaultGates;
+  const currentGate = gates.find(g => g.id === selectedGate) || gates[0];
   const weightMismatch = currentGate && Math.abs(currentGate.weight - currentGate.verifiedWeight) > currentGate.weight * 0.03;
 
   return (

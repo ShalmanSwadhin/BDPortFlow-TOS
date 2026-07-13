@@ -1,12 +1,50 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CreditCard, DollarSign, FileText, Download, Search, Filter, TrendingUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
+import { billingAPI } from '../api/client';
+import { useApp } from '../context/AppContext';
 
 export default function BillingTariff() {
+  const { token } = useApp();
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+  const [invoiceList, setInvoiceList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const invoices = [
+  // Load invoices from database
+  useEffect(() => {
+    if (!token) return;
+
+    const loadInvoices = async () => {
+      setLoading(true);
+      try {
+        const response = await billingAPI.getAll();
+        if (response.data.success && response.data.data && response.data.data.length > 0) {
+          const loadedInvoices = response.data.data.map((invoice: any) => ({
+            id: invoice._id?.toString() || invoice.id,
+            container: invoice.container || 'N/A',
+            client: invoice.client || 'Unknown',
+            date: invoice.date || new Date().toISOString().split('T')[0],
+            storage: invoice.storage || 0,
+            handling: invoice.handling || 0,
+            demurrage: invoice.demurrage || 0,
+            total: invoice.total || 0,
+            status: invoice.status || 'pending',
+            days: invoice.days || 0,
+          }));
+          setInvoiceList(loadedInvoices);
+        }
+      } catch (error: any) {
+        console.error('Error loading invoices:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadInvoices();
+  }, [token]);
+
+  const defaultInvoices = [
     {
       id: 'INV-2024-001247',
       container: 'TCLU3456789',
@@ -68,6 +106,8 @@ export default function BillingTariff() {
       days: 3,
     },
   ];
+
+  const invoices = invoiceList.length > 0 ? invoiceList : defaultInvoices;
 
   const revenueData = [
     { month: 'Jun', revenue: 42.5 },
@@ -286,12 +326,50 @@ export default function BillingTariff() {
                   </button>
                   {selectedInvoice.status === 'pending' && (
                     <button 
-                      onClick={() => {
-                        toast.success('Payment recorded', {
-                          description: `Invoice ${selectedInvoice.id} marked as paid`,
-                        });
+                      onClick={async () => {
+                        if (!selectedInvoice) return;
+                        try {
+                          const response = await billingAPI.markAsPaid(selectedInvoice.id);
+                          if (response.data.success) {
+                            setInvoiceList(invoiceList.map(inv => 
+                              inv.id === selectedInvoice.id ? { ...inv, status: 'paid' } : inv
+                            ));
+                            setSelectedInvoice({ ...selectedInvoice, status: 'paid' });
+                            toast.success('Payment recorded', {
+                              description: `Invoice ${selectedInvoice.id} marked as paid`,
+                            });
+                          }
+                        } catch (error: any) {
+                          console.error('Error marking invoice as paid:', error);
+                          toast.error('Failed to record payment');
+                        }
                       }}
                       className="w-full px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/50 rounded-lg transition-colors"
+                    >
+                      Mark as Paid
+                    </button>
+                  )}
+                  {selectedInvoice.status !== 'pending' && (
+                    <button
+                      onClick={async () => {
+                        if (!selectedInvoice) return;
+                        try {
+                          const response = await billingAPI.markAsPaid(selectedInvoice.id);
+                          if (response.data.success) {
+                            setInvoiceList(invoiceList.map(inv => 
+                              inv.id === selectedInvoice.id ? { ...inv, status: 'paid' } : inv
+                            ));
+                            setSelectedInvoice({ ...selectedInvoice, status: 'paid' });
+                            toast.success('Payment recorded', {
+                              description: `Invoice ${selectedInvoice.id} marked as paid`,
+                            });
+                          }
+                        } catch (error: any) {
+                          console.error('Error marking invoice as paid:', error);
+                          toast.error('Failed to record payment');
+                        }
+                      }}
+                      className="w-full px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/50 rounded-lg transition-colors"
                     >
                       Mark as Paid
                     </button>

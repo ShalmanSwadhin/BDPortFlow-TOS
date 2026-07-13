@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Calendar, Clock, Truck, CheckCircle, AlertCircle, TrendingUp, X } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 export default function TruckAppointment() {
   const { bookings, addBooking, deleteBooking, updateBooking } = useApp();
@@ -37,7 +37,7 @@ export default function TruckAppointment() {
     return baseTimeSlots.map(time => {
       const bookedCount = bookingsForDate.filter(b => b.slot === time).length;
       const available = MAX_TRUCKS_PER_SLOT - bookedCount;
-      
+
       let status = 'low';
       if (bookedCount >= MAX_TRUCKS_PER_SLOT) {
         status = 'full';
@@ -109,7 +109,17 @@ export default function TruckAppointment() {
     }
   };
 
-  const recentBookings = bookings.filter(b => b.date === selectedDate).slice(0, 4);
+  const recentBookings = bookings
+    .filter(b => {
+      // Show bookings from selected date onwards (not past dates)
+      return b.date >= selectedDate;
+    })
+    .sort((a, b) => {
+      // Sort by date first, then by time slot
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return a.slot.localeCompare(b.slot);
+    })
+    .slice(0, 4);
 
   const getSlotColor = (status: string) => {
     switch (status) {
@@ -197,11 +207,10 @@ export default function TruckAppointment() {
                   <button
                     key={idx}
                     onClick={() => setSelectedDate(dateString)}
-                    className={`px-3 sm:px-4 py-2 rounded-lg transition-all text-xs sm:text-sm ${
-                      selectedDate === dateString
+                    className={`px-3 sm:px-4 py-2 rounded-lg transition-all text-xs sm:text-sm ${selectedDate === dateString
                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50'
                         : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                    }`}
+                      }`}
                   >
                     {label}
                   </button>
@@ -220,11 +229,10 @@ export default function TruckAppointment() {
                   key={slot.time}
                   onClick={() => slot.status !== 'full' && setSelectedSlot(slot.time)}
                   disabled={slot.status === 'full'}
-                  className={`p-4 rounded-lg border-2 transition-all ${
-                    selectedSlot === slot.time
+                  className={`p-4 rounded-lg border-2 transition-all ${selectedSlot === slot.time
                       ? 'ring-2 ring-emerald-400 scale-105'
                       : ''
-                  } ${getSlotColor(slot.status)}`}
+                    } ${getSlotColor(slot.status)}`}
                 >
                   <div className="text-lg text-slate-200 mb-2">{slot.time}</div>
                   <div className={`text-sm mb-1 ${getSlotTextColor(slot.status)}`}>
@@ -232,11 +240,10 @@ export default function TruckAppointment() {
                   </div>
                   <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                     <div
-                      className={`h-full ${
-                        slot.status === 'low' ? 'bg-emerald-500' :
-                        slot.status === 'medium' ? 'bg-yellow-500' :
-                        slot.status === 'high' ? 'bg-orange-500' : 'bg-red-500'
-                      }`}
+                      className={`h-full ${slot.status === 'low' ? 'bg-emerald-500' :
+                          slot.status === 'medium' ? 'bg-yellow-500' :
+                            slot.status === 'high' ? 'bg-orange-500' : 'bg-red-500'
+                        }`}
                       style={{ width: `${(slot.booked / (slot.booked + slot.available)) * 100}%` }}
                     ></div>
                   </div>
@@ -385,8 +392,8 @@ export default function TruckAppointment() {
           {/* Recent Bookings */}
           <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-6">
             <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg sm:text-xl">Recent Bookings ({recentBookings.length})</h3>
-              </div>
+              <h3 className="text-lg sm:text-xl">Recent Bookings ({recentBookings.length})</h3>
+            </div>
             {recentBookings.length === 0 ? (
               <div className="text-center py-8 text-slate-500">
                 <Truck className="w-12 h-12 mx-auto mb-3 opacity-20" />
@@ -402,11 +409,10 @@ export default function TruckAppointment() {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm text-slate-300">{booking.truck}</span>
                       <div className="flex items-center gap-2">
-                        <span className={`text-xs px-2 py-1 rounded ${
-                          booking.status === 'confirmed'
+                        <span className={`text-xs px-2 py-1 rounded ${booking.status === 'confirmed'
                             ? 'bg-emerald-500/20 text-emerald-400'
                             : 'bg-yellow-500/20 text-yellow-400'
-                        }`}>
+                          }`}>
                           {booking.status}
                         </span>
                         <button
@@ -521,11 +527,10 @@ export default function TruckAppointment() {
                           <td className="py-3 px-4 text-slate-400">{booking.date}</td>
                           <td className="py-3 px-4 text-slate-400">{booking.slot}</td>
                           <td className="py-3 px-4">
-                            <span className={`px-3 py-1 rounded-full text-xs ${
-                              booking.status === 'confirmed'
+                            <span className={`px-3 py-1 rounded-full text-xs ${booking.status === 'confirmed'
                                 ? 'bg-emerald-500/20 text-emerald-400'
                                 : 'bg-yellow-500/20 text-yellow-400'
-                            }`}>
+                              }`}>
                               {booking.status}
                             </span>
                           </td>
@@ -605,7 +610,7 @@ export default function TruckAppointment() {
               </div>
               <div>
                 <label className="block text-slate-400 text-sm mb-2">New Time Slot</label>
-                <select 
+                <select
                   value={rescheduleSlot || rescheduleBooking.slot}
                   onChange={(e) => setRescheduleSlot(e.target.value)}
                   className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-orange-500">
@@ -633,12 +638,12 @@ export default function TruckAppointment() {
                 onClick={async () => {
                   const newDate = rescheduleDate || rescheduleBooking.date;
                   const newSlot = rescheduleSlot || rescheduleBooking.slot;
-                  
+
                   await updateBooking(rescheduleBooking.id, {
                     date: newDate,
                     slot: newSlot,
                   });
-                  
+
                   setRescheduleBooking(null);
                   setRescheduleDate('');
                   setRescheduleSlot('');

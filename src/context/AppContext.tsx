@@ -76,6 +76,7 @@ interface AppContextType {
   addBooking: (booking: Omit<TruckBooking, 'id'>) => void;
   updateBooking: (id: string, updates: Partial<TruckBooking>) => void;
   deleteBooking: (id: string) => void;
+  addVessel: (vessel: Omit<Vessel, 'id' | 'progress' | 'color'>) => Promise<Vessel | undefined>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -85,7 +86,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const savedUser = localStorage.getItem('user');
     return savedUser ? JSON.parse(savedUser) : null;
   });
-  
+
   const [token, setToken] = useState<string | null>(() => {
     return localStorage.getItem('token');
   });
@@ -135,9 +136,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         containerId: booking.container,
         appointmentDate: booking.date,
         appointmentTime: booking.slot,
-        purpose: booking.operationType === 'Container Pickup' ? 'Pickup' : 
-                booking.operationType === 'Container Delivery' ? 'Delivery' : 
-                booking.operationType === 'Empty Return' ? 'Empty Return' : 'Delivery',
+        purpose: booking.operationType === 'Container Pickup' ? 'Pickup' :
+          booking.operationType === 'Container Delivery' ? 'Delivery' :
+            booking.operationType === 'Empty Return' ? 'Empty Return' : 'Delivery',
         status: booking.status || 'Scheduled',
       });
 
@@ -214,16 +215,62 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const addVessel = async (vessel: Omit<Vessel, 'id' | 'progress' | 'color'>) => {
+    try {
+      const response = await vesselAPI.create({
+        name: vessel.name,
+        length: vessel.length,
+        draft: vessel.draft,
+        eta: vessel.eta,
+        etd: vessel.etd,
+        berth: vessel.berth || null,
+        status: vessel.status || 'incoming',
+        cargo: vessel.cargo || 'Container',
+        containers: vessel.containers || 0,
+      });
+
+      if (response.data.success) {
+        const apiVessel = response.data.data;
+        const newVessel: Vessel = {
+          id: apiVessel._id?.toString() || apiVessel.id,
+          name: apiVessel.name,
+          length: apiVessel.length,
+          draft: apiVessel.draft,
+          eta: apiVessel.eta,
+          etd: apiVessel.etd,
+          berth: apiVessel.berth || null,
+          status: apiVessel.status || 'incoming',
+          cargo: apiVessel.cargo || 'Container',
+          containers: apiVessel.containers || 0,
+          progress: 0,
+          color: ['#00ff88', '#00d4ff', '#ffd700', '#ff6b35', '#ff1744'][Math.floor(Math.random() * 5)],
+        };
+        setVessels(prev => [...prev, newVessel]);
+        addNotification({
+          type: 'success',
+          message: `Vessel ${vessel.name} scheduled successfully`,
+        });
+        return newVessel;
+      }
+    } catch (error: any) {
+      console.error('Error adding vessel:', error);
+      addNotification({
+        type: 'error',
+        message: error.response?.data?.message || 'Failed to schedule vessel',
+      });
+    }
+  };
+
   const login = async (email: string, password: string) => {
     try {
       const response = await authAPI.login({ email, password });
       const { user: userData, token: authToken } = response.data.data;
-      
+
       setUser(userData);
       setToken(authToken);
       localStorage.setItem('user', JSON.stringify(userData));
       localStorage.setItem('token', authToken);
-      
+
       addNotification({
         type: 'success',
         message: `Welcome back, ${userData.name}!`,
@@ -253,7 +300,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const loadBookings = async () => {
       if (!token) return;
-      
+
       try {
         const response = await truckAPI.getAll();
         if (response.data.success && response.data.data) {
@@ -263,9 +310,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             container: truck.containerId,
             slot: truck.appointmentTime,
             date: new Date(truck.appointmentDate).toISOString().split('T')[0],
-            status: truck.status === 'Scheduled' ? 'pending' : 
-                    truck.status === 'Arrived' ? 'confirmed' :
-                    truck.status,
+            status: truck.status === 'Scheduled' ? 'pending' :
+              truck.status === 'Arrived' ? 'confirmed' :
+                truck.status,
             driver: truck.driverName,
             contact: truck.driverContact,
           }));
@@ -277,6 +324,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
 
     loadBookings();
+  }, [token]);
+
+  // Load vessels from the database when token is available
+  useEffect(() => {
+    const loadVessels = async () => {
+      if (!token) return;
+
+      try {
+        const response = await vesselAPI.getAll();
+        if (response.data.success && response.data.data) {
+          const loadedVessels = response.data.data.map((vessel: any) => ({
+            id: vessel._id?.toString() || vessel.id,
+            name: vessel.name,
+            length: vessel.length,
+            draft: vessel.draft,
+            eta: vessel.eta,
+            etd: vessel.etd,
+            berth: vessel.berth || null,
+            status: vessel.status || 'incoming',
+            cargo: vessel.cargo || 'Container',
+            containers: vessel.containers || 0,
+            progress: vessel.progress || 0,
+            color: vessel.color || '#00ff88',
+          }));
+          setVessels(loadedVessels);
+        }
+      } catch (error) {
+        console.error('Error loading vessels:', error);
+      }
+    };
+
+    loadVessels();
   }, [token]);
 
   return (
@@ -298,6 +377,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addBooking,
         updateBooking,
         deleteBooking,
+        addVessel,
       }}
     >
       {children}

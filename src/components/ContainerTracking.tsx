@@ -1,6 +1,8 @@
 import { X, Package, MapPin, Calendar, Clock, TrendingUp, Ship, CheckCircle, AlertCircle, Truck, Box } from 'lucide-react';
-import { useState } from 'react';
-import { toast } from 'sonner@2.0.3';
+import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+import { containerAPI } from '../api/client';
+import { useApp } from '../context/AppContext';
 
 interface ContainerTrackingProps {
   onClose: () => void;
@@ -8,18 +10,36 @@ interface ContainerTrackingProps {
 }
 
 export default function ContainerTracking({ onClose, containerId }: ContainerTrackingProps) {
+  const { token } = useApp();
   const [searchId, setSearchId] = useState(containerId || 'TCLU3456789');
   const [isSearching, setIsSearching] = useState(false);
+  const [containerData, setContainerData] = useState<any>(null);
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     setIsSearching(true);
-    setTimeout(() => {
+    try {
+      const response = await containerAPI.getOne(searchId);
+      if (response.data.success) {
+        setContainerData(response.data.data);
+        toast.success('Container found!');
+      } else {
+        toast.error('Container not found');
+      }
+    } catch (error: any) {
+      console.error('Error searching container:', error);
+      toast.error('Error searching for container');
+    } finally {
       setIsSearching(false);
-      toast.success('Container found!');
-    }, 1000);
+    }
   };
 
-  const containerData = {
+  useEffect(() => {
+    if (containerId && token) {
+      handleSearch();
+    }
+  }, [containerId, token]);
+
+  const defaultContainerData = {
     id: searchId,
     status: 'Ready for Pickup',
     statusColor: 'emerald',
@@ -33,6 +53,8 @@ export default function ContainerTracking({ onClose, containerId }: ContainerTra
     clearance: 'Customs Cleared',
     holds: 'None',
   };
+
+  const displayData = containerData || defaultContainerData;
 
   const timeline = [
     { 
@@ -143,15 +165,15 @@ export default function ContainerTracking({ onClose, containerId }: ContainerTra
           <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 border border-slate-700 rounded-xl p-6 mb-6">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <h3 className="text-2xl mb-2">{containerData.id}</h3>
-                <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm ${getStatusColor(containerData.statusColor)}`}>
+                <h3 className="text-2xl mb-2">{displayData.id}</h3>
+                <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm ${getStatusColor(displayData.statusColor)}`}>
                   <CheckCircle className="w-4 h-4" />
-                  {containerData.status}
+                  {displayData.status}
                 </span>
               </div>
               <div className="text-right">
                 <p className="text-slate-400 text-sm mb-1">Vessel</p>
-                <p className="text-slate-200 font-medium">{containerData.vessel}</p>
+                <p className="text-slate-200 font-medium">{displayData.vessel}</p>
               </div>
             </div>
 
@@ -161,28 +183,28 @@ export default function ContainerTracking({ onClose, containerId }: ContainerTra
                   <Box className="w-4 h-4 text-slate-500" />
                   <span className="text-slate-400 text-xs">Type</span>
                 </div>
-                <p className="text-slate-200">{containerData.type}</p>
+                <p className="text-slate-200">{displayData.type}</p>
               </div>
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <TrendingUp className="w-4 h-4 text-slate-500" />
                   <span className="text-slate-400 text-xs">Weight</span>
                 </div>
-                <p className="text-slate-200">{containerData.weight}</p>
+                <p className="text-slate-200">{displayData.weight}</p>
               </div>
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <CheckCircle className="w-4 h-4 text-slate-500" />
                   <span className="text-slate-400 text-xs">Clearance</span>
                 </div>
-                <p className="text-emerald-400">{containerData.clearance}</p>
+                <p className="text-emerald-400">{displayData.clearance}</p>
               </div>
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <AlertCircle className="w-4 h-4 text-slate-500" />
                   <span className="text-slate-400 text-xs">Holds</span>
                 </div>
-                <p className="text-slate-400">{containerData.holds}</p>
+                <p className="text-slate-400">{displayData.holds}</p>
               </div>
             </div>
           </div>
@@ -197,7 +219,7 @@ export default function ContainerTracking({ onClose, containerId }: ContainerTra
               <div className="space-y-3">
                 <div>
                   <p className="text-slate-400 text-sm mb-1">Yard Position</p>
-                  <p className="text-slate-200 text-lg font-medium">{containerData.location}</p>
+                  <p className="text-slate-200 text-lg font-medium">{displayData.location}</p>
                 </div>
                 <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-700">
                   <div className="flex items-center justify-between">
@@ -216,12 +238,12 @@ export default function ContainerTracking({ onClose, containerId }: ContainerTra
               <div className="space-y-3">
                 <div>
                   <p className="text-slate-400 text-sm mb-1">Assigned Time Slot</p>
-                  <p className="text-slate-200 text-lg font-medium">{containerData.timeSlot}</p>
+                  <p className="text-slate-200 text-lg font-medium">{displayData.timeSlot}</p>
                 </div>
                 <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-700">
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400 text-sm">Gate</span>
-                    <span className="text-blue-400 font-medium">{containerData.gate}</span>
+                    <span className="text-blue-400 font-medium">{displayData.gate}</span>
                   </div>
                 </div>
               </div>

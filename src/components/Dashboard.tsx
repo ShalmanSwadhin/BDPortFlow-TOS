@@ -1,6 +1,8 @@
 import { Ship, Package, Truck, AlertTriangle, TrendingUp, Activity, Snowflake, DoorOpen, Users, FileText, CreditCard, Scale } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useApp } from '../context/AppContext';
+import { dashboardAPI } from '../api/client';
 import GateDirections from './GateDirections';
 import ContainerTracking from './ContainerTracking';
 import CustomsActionModal from './CustomsActionModal';
@@ -32,7 +34,31 @@ export default function Dashboard({ userRole, onNavigate }: DashboardProps) {
 
 // Admin Dashboard - System Overview
 function AdminDashboard() {
-  const systemStats = [
+  const { token } = useApp();
+  const [dashboardStats, setDashboardStats] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const loadDashboardStats = async () => {
+      setLoading(true);
+      try {
+        const response = await dashboardAPI.getStats();
+        if (response.data.success) {
+          setDashboardStats(response.data.data);
+        }
+      } catch (error: any) {
+        console.error('Error loading dashboard stats:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDashboardStats();
+  }, [token]);
+
+  const systemStats = dashboardStats?.systemStats || [
     { time: '00:00', users: 12, transactions: 45 },
     { time: '04:00', users: 8, transactions: 23 },
     { time: '08:00', users: 45, transactions: 156 },
@@ -41,7 +67,7 @@ function AdminDashboard() {
     { time: '20:00', users: 25, transactions: 89 },
   ];
 
-  const moduleUsage = [
+  const moduleUsage = dashboardStats?.moduleUsage || [
     { name: 'Gate Ops', value: 245, color: '#00ff88' },
     { name: 'Yard Mgmt', value: 187, color: '#00d4ff' },
     { name: 'Billing', value: 156, color: '#ffd700' },
@@ -146,7 +172,31 @@ function AdminDashboard() {
 
 // Port Operator Dashboard - Yard Master View
 function OperatorDashboard() {
-  const yardUtilization = [
+  const { token } = useApp();
+  const [operatorStats, setOperatorStats] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const loadOperatorStats = async () => {
+      setLoading(true);
+      try {
+        const response = await dashboardAPI.getStats();
+        if (response.data.success) {
+          setOperatorStats(response.data.data);
+        }
+      } catch (error: any) {
+        console.error('Error loading operator stats:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadOperatorStats();
+  }, [token]);
+
+  const yardUtilization = operatorStats?.yardUtilization || [
     { time: '00:00', usage: 65 },
     { time: '04:00', usage: 58 },
     { time: '08:00', usage: 72 },
@@ -155,7 +205,7 @@ function OperatorDashboard() {
     { time: '20:00', usage: 70 },
   ];
 
-  const craneActivity = [
+  const craneActivity = operatorStats?.craneActivity || [
     { crane: 'C1', moves: 145 },
     { crane: 'C2', moves: 132 },
     { crane: 'C3', moves: 158 },
@@ -163,7 +213,7 @@ function OperatorDashboard() {
     { crane: 'C5', moves: 124 },
   ];
 
-  const containerStatus = [
+  const containerStatus = operatorStats?.containerStatus || [
     { name: 'Ready', value: 342, color: '#00ff88' },
     { name: 'Customs Hold', value: 87, color: '#ff6b35' },
     { name: 'Reefer', value: 54, color: '#00d4ff' },

@@ -1,18 +1,66 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Package, Weight, AlertCircle, Move, Eye, MapPin } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
+import { containerAPI } from '../api/client';
 
 export default function ContainerStacking() {
-  const { containers } = useApp();
+  const { containers, token } = useApp();
   const [selectedStack, setSelectedStack] = useState<any>(null);
   const [view, setView] = useState<'top' | 'side'>('top');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [showOptimizeModal, setShowOptimizeModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [stackList, setStackList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const stacks = [
+  // Load stacks from database
+  useEffect(() => {
+    if (!token) return;
+
+    const loadStacks = async () => {
+      setLoading(true);
+      try {
+        const response = await containerAPI.getAll();
+        if (response.data.success && response.data.data && response.data.data.length > 0) {
+          // Group containers into stacks
+          const stacksMap: { [key: string]: any } = {};
+          response.data.data.forEach((container: any, idx: number) => {
+            const stackId = `A${Math.floor(idx / 4) + 1}-${(idx % 4) + 1}`.padStart(6, '0');
+            if (!stacksMap[stackId]) {
+              stacksMap[stackId] = {
+                id: stackId,
+                position: { row: Math.floor(idx / 4), col: idx % 4 },
+                height: 0,
+                containers: [],
+                status: 'optimal',
+                maxWeight: 100,
+                currentWeight: 0,
+              };
+            }
+            stacksMap[stackId].containers.push({
+              id: container._id?.toString() || container.id,
+              weight: container.weight || 22.5,
+              type: container.type || 'standard',
+              priority: container.priority || 1,
+            });
+            stacksMap[stackId].height++;
+            stacksMap[stackId].currentWeight += container.weight || 22.5;
+          });
+          setStackList(Object.values(stacksMap));
+        }
+      } catch (error: any) {
+        console.error('Error loading stacks:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadStacks();
+  }, [token]);
+
+  const defaultStacks = [
     {
       id: 'A1-01',
       position: { row: 0, col: 0 },
@@ -68,6 +116,9 @@ export default function ContainerStacking() {
       currentWeight: 35.7,
     },
   ];
+
+  // Use default stacks if database is empty
+  const stacks = stackList.length > 0 ? stackList : defaultStacks;
 
   const getStatusColor = (status: string) => {
     switch (status) {

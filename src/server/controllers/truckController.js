@@ -4,11 +4,11 @@ exports.getTrucks = async (req, res) => {
   try {
     const { status, appointmentDate } = req.query;
     let query = {};
-    
+
     // All roles can see all bookings for proper slot management
     // This allows truck drivers, operators, and admin to see complete scheduling
     // Individual truck drivers can identify their own bookings via the 'user' field
-    
+
     if (status) query.status = status;
     if (appointmentDate) {
       const start = new Date(appointmentDate);
@@ -42,9 +42,9 @@ exports.createTruck = async (req, res) => {
     const { truckNumber, driverName, driverContact, containerId, appointmentDate, appointmentTime, purpose } = req.body;
     if (!truckNumber || !driverName || !driverContact || !containerId || !appointmentDate || !appointmentTime || !purpose) {
       console.error('Missing required fields:', { truckNumber, driverName, driverContact, containerId, appointmentDate, appointmentTime, purpose });
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Missing required fields: truckNumber, driverName, driverContact, containerId, appointmentDate, appointmentTime, purpose' 
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: truckNumber, driverName, driverContact, containerId, appointmentDate, appointmentTime, purpose'
       });
     }
 
@@ -57,9 +57,9 @@ exports.createTruck = async (req, res) => {
     // Validate user is authenticated
     if (!req.user || !req.user._id) {
       console.error('User not authenticated:', req.user);
-      return res.status(401).json({ 
-        success: false, 
-        message: 'User not authenticated' 
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
       });
     }
 
@@ -87,8 +87,8 @@ exports.createTruck = async (req, res) => {
       errors: error.errors,
       stack: error.stack
     });
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: error.message || 'Failed to create truck appointment',
       details: error.errors ? Object.keys(error.errors).map(key => `${key}: ${error.errors[key].message}`) : undefined
     });

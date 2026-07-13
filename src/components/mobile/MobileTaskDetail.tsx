@@ -1,5 +1,5 @@
 import { ArrowLeft, Check, X, Send, MapPin, Clock, TrendingUp } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
 
 interface MobileTaskDetailProps {

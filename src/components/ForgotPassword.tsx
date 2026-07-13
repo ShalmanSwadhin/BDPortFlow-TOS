@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Mail, ArrowLeft, CheckCircle, AlertCircle, Ship, Lock } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface ForgotPasswordProps {
   onBackToLogin: () => void;
